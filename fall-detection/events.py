@@ -28,11 +28,14 @@ class FallEvent:
     torso_angle: float          # degrees
     snapshot_path: str | None
     stream_t: float             # seconds into the camera/video stream, for finding it in a replay
+    clip_path: str | None = None  # .mp4; still being recorded when the event is sent
 
     @classmethod
-    def from_detection(cls, d: Detection, timestamp: float, snapshot_path: str | None) -> FallEvent:
+    def from_detection(cls, d: Detection, timestamp: float, snapshot_path: str | None,
+                       clip_path: str | None = None) -> FallEvent:
         return cls(timestamp=timestamp, kind=d.kind, peak_hip_vel=d.peak_hip_vel,
-                   torso_angle=d.torso_angle, snapshot_path=snapshot_path, stream_t=d.t)
+                   torso_angle=d.torso_angle, snapshot_path=snapshot_path, stream_t=d.t,
+                   clip_path=clip_path)
 
     @property
     def time_str(self) -> str:
@@ -61,7 +64,8 @@ class ConsoleSink:
     def send(self, event: FallEvent) -> None:
         print(f"[{event.time_str}] {event.kind.upper()}  "
               f"peak_vel={event.peak_hip_vel:.2f}  angle={event.torso_angle:.0f}  "
-              f"stream_t={event.stream_t:.2f}s  snapshot={event.snapshot_path}", flush=True)
+              f"stream_t={event.stream_t:.2f}s  snapshot={event.snapshot_path}  "
+              f"clip={event.clip_path}", flush=True)
 
 
 class FileSink:
