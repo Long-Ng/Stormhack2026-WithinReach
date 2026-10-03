@@ -20,6 +20,7 @@ import cv2
 
 from camera import open_source
 from config import Config
+from cover import CoverReset
 from detector import FallDetector
 from events import ConsoleSink, FallEvent, FileSink, dispatch, save_snapshot
 from features import FeatureExtractor, FeatureLogger
@@ -72,6 +73,7 @@ def main() -> int:
 
     extractor = FeatureExtractor(cfg)
     detector = FallDetector(cfg)
+    cover = CoverReset(cfg) if cfg.cover_reset else None
     # Add new alert channels here; nothing else needs to change.
     sinks = [ConsoleSink(), FileSink(cfg.events_dir)]
 
@@ -89,6 +91,12 @@ def main() -> int:
             else:
                 ts_ms = (time.perf_counter() - start_wall) * 1000.0
 
+            # Cover the lens for cover_reset_s to start detection over.
+            if cover is not None and cover.update(frame, ts_ms / 1000.0):
+                extractor = FeatureExtractor(cfg)
+                detector = FallDetector(cfg)
+                print("Reset (camera covered)")
+
             lms = estimator.process(frame, ts_ms)
             feats = extractor.update(lms, ts_ms / 1000.0)
             detection = detector.update(feats, ts_ms / 1000.0)
@@ -103,7 +111,7 @@ def main() -> int:
             fps = inst if fps == 0.0 else cfg.fps_smoothing * fps + (1 - cfg.fps_smoothing) * inst
 
             if not args.no_display:
-                draw_overlay(frame, lms, feats, detector, fps, cfg.min_visibility)
+                draw_overlay(frame, lms, feats, detector, fps, cfg.min_visibility, cover)
                 cv2.imshow(WINDOW, frame)
                 key = cv2.waitKey(1) & 0xFF
                 if key in (ord("q"), 27):  # q or Esc

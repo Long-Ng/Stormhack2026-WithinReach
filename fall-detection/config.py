@@ -52,6 +52,12 @@ class Config:
     lost_grace_s: float = 1.0  # pose-loss tolerance while down
     slow_fall_s: float = 15.0  # down this long without a fast descent -> prolonged_lying
 
+    # Cover-to-reset: lens covered (dark AND flat) for cover_reset_s resets detection
+    cover_reset: bool = True
+    cover_reset_s: float = 3.0
+    cover_max_brightness: float = 40.0  # mean pixel value 0-255
+    cover_max_std: float = 12.0  # largest per-channel std; a covered lens is a flat blur
+
     # Events
     events_dir: str = str(Path(__file__).parent / "events")  # events.jsonl + snapshots
 

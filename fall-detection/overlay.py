@@ -5,6 +5,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
+from cover import CoverReset
 from detector import FallDetector, State
 from features import Features
 from pose import Landmarks
@@ -77,8 +78,24 @@ def draw_state(frame: np.ndarray, det: FallDetector) -> None:
         draw_text(frame, f"lying {left:4.1f}s", (10, h - 60), STATE_COLORS[State.ON_GROUND], scale=0.8)
 
 
+def draw_centered(frame: np.ndarray, text: str, y: int, color, scale: float) -> None:
+    (tw, _), _ = cv2.getTextSize(text, FONT, scale, 3)
+    draw_text(frame, text, ((frame.shape[1] - tw) // 2, y), color, scale=scale, thickness=3)
+
+
+def draw_cover(frame: np.ndarray, cover: CoverReset) -> None:
+    h, w = frame.shape[:2]
+    # Live brightness / texture readout for tuning cover_max_brightness / cover_max_std.
+    draw_text(frame, f"lum {cover.brightness:3.0f} tex {cover.spread:3.0f}", (w - 170, 50), scale=0.5)
+    if cover.remaining is not None:
+        draw_centered(frame, f"RESET IN {cover.remaining:3.1f}s", h // 2, (0, 230, 255), 1.4)
+    elif cover.fired:
+        draw_centered(frame, "RESET - uncover camera", h // 2, (0, 200, 0), 1.0)
+
+
 def draw_overlay(frame: np.ndarray, lms: Landmarks | None, feats: Features | None,
-                 det: FallDetector, fps: float, min_visibility: float) -> None:
+                 det: FallDetector, fps: float, min_visibility: float,
+                 cover: CoverReset | None = None) -> None:
     if lms is not None:
         draw_skeleton(frame, lms, min_visibility)
     if feats is not None:
@@ -87,6 +104,8 @@ def draw_overlay(frame: np.ndarray, lms: Landmarks | None, feats: Features | Non
         draw_text(frame, "NO POSE" if lms is None else "NO TORSO", (10, 30), WARN_COLOR, scale=0.9)
 
     draw_state(frame, det)
+    if cover is not None:
+        draw_cover(frame, cover)
 
     h, w = frame.shape[:2]
     draw_text(frame, f"FPS {fps:5.1f}", (w - 130, 25))
