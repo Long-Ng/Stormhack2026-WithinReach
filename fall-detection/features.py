@@ -26,7 +26,7 @@ MOTION_POINTS = (L_SHOULDER, R_SHOULDER, L_HIP, R_HIP, L_KNEE, R_KNEE)
 @dataclass
 class Features:
     t: float                    # seconds
-    torso_angle: float          # degrees from vertical, smoothed. 0 = upright, 90 = horizontal
+    torso_angle: float          # degrees, smoothed. 0 = upright, 90 = horizontal, 180 = upside down
     torso_angle_raw: float
     hip_vel: float              # torso lengths/s, positive = down, smoothed
     hip_vel_peak: float         # max raw hip_vel over the last vel_window_s
@@ -49,8 +49,14 @@ def _midpoint(lms: np.ndarray, visible: np.ndarray, a: int, b: int) -> np.ndarra
 
 
 def torso_angle_deg(shoulder_mid: np.ndarray, hip_mid: np.ndarray) -> float:
-    dx, dy = shoulder_mid - hip_mid
-    return math.degrees(math.atan2(abs(dx), abs(dy)))
+    """0 = upright, 90 = horizontal, 180 = upside down (shoulders below hips).
+
+    Keeping the sign matters for high cameras: someone lying head-toward a ceiling
+    camera appears vertical but inverted, and must not read as standing.
+    Left/right lean is not distinguished.
+    """
+    dx, dy = shoulder_mid - hip_mid  # image y points down, so upright has dy < 0
+    return math.degrees(math.atan2(abs(dx), -dy))
 
 
 def _ema(prev: float | None, x: float, alpha: float) -> float:

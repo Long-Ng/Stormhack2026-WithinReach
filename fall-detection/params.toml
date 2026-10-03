@@ -30,7 +30,7 @@ fall_vel = 1.5            # torso lengths/s downward. Real falls ~2.5-3.5, sitti
 fall_window_s = 1.5       # time allowed from fast descent to lying
 
 # "Down" = (torso_angle > lying_angle OR bbox_aspect > lying_aspect) AND hip_height < low_hip
-lying_angle = 60.0        # degrees from vertical
+lying_angle = 60.0        # torso angle: 0 upright, 90 horizontal, 180 upside down
 lying_aspect = 1.2        # bbox width / height
 low_hip = 0.6             # hip height above ankles, in torso lengths
 
@@ -40,7 +40,7 @@ confirm_s = 3.0           # seconds of stillness before the fall is confirmed
 still_grace_s = 0.5       # movement shorter than this pauses the timer instead of resetting it
 
 # Recovery and pose loss
-upright_angle = 30.0      # torso angle counted as upright
+upright_angle = 30.0      # torso angle counted as upright (upside down is not upright)
 recover_s = 1.0           # seconds upright to go back to UPRIGHT
 lost_grace_s = 1.0        # pose lost while down: hold this long, then count as still
 slow_fall_s = 15.0        # lying this long without a fast descent -> prolonged_lying

@@ -65,7 +65,10 @@ def handle_detection(detection, frame, lms, cfg: Config, sinks, streamer=None) -
         snapshot_path = None
     dispatch(FallEvent.from_detection(detection, now, snapshot_path), sinks)
     if streamer is not None:
-        streamer.alert(f"{detection.kind.replace('_', ' ').upper()} DETECTED")
+        try:  # a dashboard problem must never stop the detector
+            streamer.alert(f"{detection.kind.replace('_', ' ').upper()} DETECTED")
+        except Exception as e:
+            print(f"dashboard alert failed: {e!r}", file=sys.stderr)
 
 
 def start_dashboard(port: int, cfg: Config):

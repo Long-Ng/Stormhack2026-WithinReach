@@ -41,7 +41,7 @@ class Config:
     # Detector (state machine)
     fall_vel: float = 1.5  # torso lengths/s downward; real falls peak ~2.5-3.5, sitting ~0.8
     fall_window_s: float = 1.5  # time allowed from fast descent to horizontal
-    lying_angle: float = 60.0  # degrees from vertical
+    lying_angle: float = 60.0  # torso angle above this is lying (0 upright, 180 upside down)
     lying_aspect: float = 1.2  # bbox width / height
     low_hip: float = 0.6  # normalized hip height
     still_motion: float = 0.3  # torso lengths/s

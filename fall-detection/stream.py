@@ -5,7 +5,7 @@ Endpoints:
   /               dashboard.html
   /video          live MJPEG stream
   /snapshot       latest frame as one JPEG
-  /events.json    list of saved event snapshots, newest first
+  /events.json    {"now", "events": [{"name", "url", "t"}] oldest first, "alert"}
   /events/<file>  a saved event snapshot
 """
 
@@ -38,6 +38,7 @@ class Streamer:
         self._cond = threading.Condition()
         self._last = 0.0
         self._closed = False
+        self._alert: dict | None = None  # latest alert(), for the dashboard
         owner = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -118,12 +119,24 @@ class Streamer:
             self._jpg = buf.tobytes()
             self._cond.notify_all()
 
+    def alert(self, message: str) -> None:
+        """Flag an active alert. Called on detection and every frame while confirmed."""
+        now = time.time()
+        if self._alert is None or self._alert["message"] != message:
+            self._alert = {"message": message, "since": now, "t": now}
+        else:
+            self._alert["t"] = now
+
     def _events_json(self) -> bytes:
+        # Shape read by dashboard/index.html poll(): server clock in `now`, events oldest
+        # first (it treats the last one as the newest) with name / url / t (epoch s).
         items = []
         if self.events_dir.is_dir():
-            for f in sorted(self.events_dir.glob("*.jpg"), key=lambda p: p.stat().st_mtime, reverse=True)[:50]:
-                items.append({"file": f.name, "url": f"/events/{f.name}", "time": f.stat().st_mtime})
-        return json.dumps(items).encode()
+            newest = sorted(self.events_dir.glob("*.jpg"), key=lambda p: p.stat().st_mtime,
+                            reverse=True)[:50]
+            for f in reversed(newest):
+                items.append({"name": f.name, "url": f"/events/{f.name}", "t": f.stat().st_mtime})
+        return json.dumps({"now": time.time(), "events": items, "alert": self._alert}).encode()
 
     def close(self) -> None:
         self._closed = True

@@ -32,9 +32,25 @@ def lying(torso=100.0):
 def test_torso_angle_vertical_and_horizontal():
     assert torso_angle_deg(np.array([0.0, 0.0]), np.array([0.0, 100.0])) == pytest.approx(0.0)
     assert torso_angle_deg(np.array([100.0, 0.0]), np.array([0.0, 0.0])) == pytest.approx(90.0)
-    # Upside-down still counts as vertical, and direction of lean does not matter.
-    assert torso_angle_deg(np.array([0.0, 100.0]), np.array([0.0, 0.0])) == pytest.approx(0.0)
+    # Upside down (shoulders below hips, e.g. lying head-toward a ceiling camera) is 180,
+    # and the direction of a sideways lean does not matter.
+    assert torso_angle_deg(np.array([0.0, 100.0]), np.array([0.0, 0.0])) == pytest.approx(180.0)
     assert torso_angle_deg(np.array([-50.0, 0.0]), np.array([0.0, 50.0])) == pytest.approx(45.0)
+    assert torso_angle_deg(np.array([50.0, 50.0]), np.array([0.0, 0.0])) == pytest.approx(135.0)
+
+
+def test_torso_ref_does_not_learn_from_upside_down():
+    ex = FeatureExtractor(Config())
+    t = 0.0
+    for _ in range(30):
+        f = ex.update(standing(torso=100.0), t)
+        t += 1 / FPS
+    inverted = make_lms(shoulder=(320.0, 300.0), hip=(320.0, 260.0))  # 40 px, foreshortened
+    for _ in range(30):
+        f = ex.update(inverted, t)
+        t += 1 / FPS
+    assert f.torso_angle > 170
+    assert f.torso_ref == pytest.approx(100.0)
 
 
 def test_extractor_reports_angle():
