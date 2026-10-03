@@ -23,9 +23,10 @@ import time
 import cv2
 
 from camera import open_source
+from clips import ClipRecorder
 from config import Config
 from cover import CoverReset
-from detector import FallDetector
+from detector import FallDetector, State
 from events import ConsoleSink, FallEvent, FileSink, dispatch, save_snapshot
 from features import FeatureExtractor, FeatureLogger
 from overlay import draw_overlay, draw_skeleton
@@ -52,8 +53,10 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def handle_detection(detection, frame, lms, cfg: Config, sinks, streamer=None) -> None:
-    """Snapshot the frame (before the debug text), send the event, flag the live stream."""
+def handle_detection(detection, frame, lms, cfg: Config, sinks, streamer=None,
+                     recorder: ClipRecorder | None = None) -> None:
+    """Snapshot the frame (before the debug text), start the clip, send the event,
+    flag the live stream."""
     now = time.time()
     snap = frame.copy()
     if SNAPSHOT_SKELETON and lms is not None:
@@ -63,7 +66,8 @@ def handle_detection(detection, frame, lms, cfg: Config, sinks, streamer=None) -
     except Exception as e:
         print(f"snapshot failed: {e!r}", file=sys.stderr)
         snapshot_path = None
-    dispatch(FallEvent.from_detection(detection, now, snapshot_path), sinks)
+    clip_path = recorder.trigger(now, detection.t) if recorder is not None else None
+    dispatch(FallEvent.from_detection(detection, now, snapshot_path, clip_path), sinks)
     if streamer is not None:
         try:  # a dashboard problem must never stop the detector
             streamer.alert(f"{detection.kind.replace('_', ' ').upper()} DETECTED")
@@ -103,8 +107,11 @@ def main() -> int:
     cover = CoverReset(cfg) if cfg.cover_reset else None
     # Add new alert channels here; nothing else needs to change.
     sinks = [ConsoleSink(), FileSink(cfg.events_dir)]
+    recorder = ClipRecorder(cfg.events_dir, cfg.clip_pre_s, cfg.clip_tail_s, cfg.clip_max_after_s,
+                            cfg.clip_max_width, cfg.clip_max_fps)
 
     with contextlib.ExitStack() as stack:
+        stack.callback(recorder.close)  # finish the clip in progress on exit
         estimator = stack.enter_context(PoseEstimator(cfg))
         logger = stack.enter_context(FeatureLogger(args.log_features)) if args.log_features else None
         while True:
@@ -132,7 +139,9 @@ def main() -> int:
             feats = extractor.update(lms, ts_ms / 1000.0)
             detection = detector.update(feats, ts_ms / 1000.0)
             if detection is not None:
-                handle_detection(detection, frame, lms, cfg, sinks, streamer)
+                handle_detection(detection, frame, lms, cfg, sinks, streamer, recorder)
+            # Clean frame (no overlay yet); the clip runs until the person is back up.
+            recorder.add(frame, ts_ms / 1000.0, detector.state is not State.UPRIGHT)
             if streamer is not None and detector.state.name == "FALL_CONFIRMED":
                 streamer.alert("FALL CONFIRMED")
             if logger is not None:

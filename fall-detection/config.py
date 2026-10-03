@@ -59,7 +59,12 @@ class Config:
     cover_max_std: float = 12.0  # largest per-channel std; a covered lens is a flat blur
 
     # Events
-    events_dir: str = str(Path(__file__).parent / "events")  # events.jsonl + snapshots
+    events_dir: str = str(Path(__file__).parent / "events")  # events.jsonl, snapshots, clips
+    clip_pre_s: float = 30.0  # video kept from before the fall is confirmed
+    clip_tail_s: float = 10.0  # keep recording this long after the person is back up
+    clip_max_after_s: float = 300.0  # hard cap on recording after the fall
+    clip_max_width: int = 640  # clips are downscaled to this width; size ~ width^2 x fps
+    clip_max_fps: float = 15.0  # clips keep at most this many frames per second
 
     # Display
     fps_smoothing: float = 0.9  # EMA factor for the FPS readout

@@ -52,8 +52,11 @@ Without the client, use the phone's Wi-Fi stream directly:
 ## Events
 
 A confirmed fall prints one line, appends one JSON object to `events/events.jsonl`,
-and saves the frame (with skeleton) as `events/<date-time>.jpg`. To add an alert
-channel, write a class with `send(event)` and add it to `sinks` in `main.py`.
+saves the frame as `events/<date-time>.jpg` (the dashboard lists these), and records
+`events/<date-time>.mp4`: the 30 s before the confirmation, then everything after
+until the person has been back up for 10 s (capped at 5 min; see `[events]` in
+`params.toml`). The clip finishes writing in the background, or on exit. To add an
+alert channel, write a class with `send(event)` and add it to `sinks` in `main.py`.
 
 ## Tuning
 

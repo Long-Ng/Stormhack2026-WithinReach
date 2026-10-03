@@ -54,7 +54,14 @@ cover_max_brightness = 40.0  # mean pixel value 0-255
 cover_max_std = 12.0         # texture; a covered lens is a flat blur
 
 [events]
-events_dir = "events"     # events.jsonl and snapshot .jpg files, relative to this file
+events_dir = "events"     # events.jsonl, snapshot .jpg and clip .mp4 files, relative to this file
+# Each event saves an .mp4: clip_pre_s before the confirmation, then everything after
+# until the person has been back up for clip_tail_s (or clip_max_after_s has passed).
+clip_pre_s = 30.0
+clip_tail_s = 10.0
+clip_max_after_s = 300.0
+clip_max_width = 640      # pixels; file size grows with width^2 x fps (640 @ 15 fps ~ 25 MB/min)
+clip_max_fps = 15.0
 
 [display]
 fps_smoothing = 0.9
