@@ -27,9 +27,10 @@ class State(Enum):
 @dataclass
 class Detection:
     t: float                # stream time in seconds
-    kind: str               # "fall" | "prolonged_lying"
+    kind: str               # "fall" | "prolonged_lying" | "sensor_fall"
     peak_hip_vel: float     # torso lengths/s, max seen during the descent
     torso_angle: float      # degrees, at confirmation
+    sensor: bool = False    # confirmed with the help of a wearable impact
 
 
 class FallDetector:
@@ -45,6 +46,11 @@ class FallDetector:
         self._upright_time = 0.0
         self._lost_time = 0.0
         self._unsteady_time = 0.0  # consecutive non-still time while ON_GROUND
+        self._impact_t: float | None = None  # latest wearable impact, stream time
+
+    def add_impact(self, t: float) -> None:
+        """Report a wearable impact (stream time in seconds)."""
+        self._impact_t = t
 
     def is_down(self, f: Features) -> bool:
         """Horizontal (by torso angle or bbox shape) and, when the ankles are visible, low."""
@@ -70,8 +76,48 @@ class FallDetector:
             self._fall_start = None
             self._peak_vel = 0.0
 
-    def update(self, feats: Features | None, t: float) -> Detection | None:
-        """Feed one frame (t in seconds). Returns a Detection on the frame a fall is confirmed."""
+    def update(self, feats: Features | None, t: float,
+               phone_still_s: float | None = None) -> Detection | None:
+        """Feed one frame (t in seconds). Returns a Detection on the frame a fall is confirmed.
+
+        phone_still_s: how long the wearable has been still, or None without a wearable.
+        """
+        d = self._update_camera(feats, t)
+        if d is not None:
+            return d
+        return self._update_wearable(feats, t, phone_still_s)
+
+    def _update_wearable(self, feats: Features | None, t: float,
+                         phone_still_s: float | None) -> Detection | None:
+        """The wearable only adds detections; the camera-only path is unchanged."""
+        if self._impact_t is None:
+            return None
+        cfg = self.cfg
+        age = t - self._impact_t
+        if age > cfg.imu_hold_s:
+            self._impact_t = None
+            return None
+
+        # Camera saw the descent and the person is down: the impact confirms it now.
+        if (self.state is State.ON_GROUND and self._fall_start is not None
+                and self._fall_start - cfg.imu_match_s <= self._impact_t
+                <= self._fall_start + cfg.fall_window_s + cfg.imu_match_s):
+            return self._confirm(t, "fall", sensor=True)
+
+        if self.state is State.UPRIGHT:
+            # Still upright a while after the impact: the phone was dropped, not the person.
+            if (feats is not None and age >= cfg.recover_s
+                    and self._upright_time >= cfg.recover_s):
+                self._impact_t = None
+                return None
+            # Camera missed the descent (out of frame, occluded, or no fast drop seen),
+            # but the phone hit hard and has not moved since.
+            if (phone_still_s is not None and phone_still_s >= cfg.imu_still_s
+                    and (feats is None or self.is_down(feats))):
+                return self._confirm(t, "sensor_fall", sensor=True)
+        return None
+
+    def _update_camera(self, feats: Features | None, t: float) -> Detection | None:
         dt = t - self._prev_t if self._prev_t is not None else 0.0
         self._prev_t = t
         if feats is None:
@@ -145,5 +191,10 @@ class FallDetector:
     def _maybe_confirm(self, t: float) -> Detection | None:
         if self.still_time < self.cfg.confirm_s:
             return None
+        return self._confirm(t, "fall")
+
+    def _confirm(self, t: float, kind: str, sensor: bool = False) -> Detection:
+        peak = self._peak_vel
         self._set_state(State.FALL_CONFIRMED)
-        return Detection(t, "fall", self._peak_vel, self._last_angle)
+        self._impact_t = None
+        return Detection(t, kind, peak, self._last_angle, sensor)

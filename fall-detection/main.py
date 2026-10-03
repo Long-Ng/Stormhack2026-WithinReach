@@ -24,6 +24,7 @@ from cover import CoverReset
 from detector import FallDetector
 from events import ConsoleSink, FallEvent, FileSink, dispatch, save_snapshot
 from features import FeatureExtractor, FeatureLogger
+from imu import open_wearable
 from overlay import draw_overlay, draw_skeleton
 from pose import PoseEstimator
 
@@ -74,6 +75,8 @@ def main() -> int:
     extractor = FeatureExtractor(cfg)
     detector = FallDetector(cfg)
     cover = CoverReset(cfg) if cfg.cover_reset else None
+    # Phone accelerometer; only for live sources, since its clock is the PC's.
+    wearable = None if is_file else open_wearable(cfg)
     # Add new alert channels here; nothing else needs to change.
     sinks = [ConsoleSink(), FileSink(cfg.events_dir)]
 
@@ -99,8 +102,17 @@ def main() -> int:
 
             lms = estimator.process(frame, ts_ms)
             feats = extractor.update(lms, ts_ms / 1000.0)
-            detection = detector.update(feats, ts_ms / 1000.0)
+            phone_still = None
+            if wearable is not None:
+                for hit in wearable.poll():
+                    detector.add_impact(hit.t - start_wall)  # perf_counter -> stream time
+                    print(f"Phone impact {hit.peak / 9.81:.1f} g")
+                if wearable.connected:
+                    phone_still = wearable.still_for(time.perf_counter())
+            detection = detector.update(feats, ts_ms / 1000.0, phone_still)
             if detection is not None:
+                if detection.sensor:
+                    print("(confirmed with phone sensor)")
                 handle_detection(detection, frame, lms, cfg, sinks)
             if logger is not None:
                 logger.log(ts_ms / 1000.0, feats)
@@ -111,7 +123,7 @@ def main() -> int:
             fps = inst if fps == 0.0 else cfg.fps_smoothing * fps + (1 - cfg.fps_smoothing) * inst
 
             if not args.no_display:
-                draw_overlay(frame, lms, feats, detector, fps, cfg.min_visibility, cover)
+                draw_overlay(frame, lms, feats, detector, fps, cfg.min_visibility, cover, wearable)
                 cv2.imshow(WINDOW, frame)
                 key = cv2.waitKey(1) & 0xFF
                 if key in (ord("q"), 27):  # q or Esc
@@ -119,6 +131,8 @@ def main() -> int:
                 if cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) < 1:
                     break  # window closed with the X button
 
+    if wearable is not None:
+        wearable.close()
     cap.release()
     cv2.destroyAllWindows()
     return 0

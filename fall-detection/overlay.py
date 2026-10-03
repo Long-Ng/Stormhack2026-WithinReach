@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import time
+
 import cv2
 import numpy as np
 
 from cover import CoverReset
 from detector import FallDetector, State
 from features import Features
+from imu import Wearable
 from pose import Landmarks
 
 # Body skeleton (face points other than the nose are skipped to reduce clutter).
@@ -93,9 +96,22 @@ def draw_cover(frame: np.ndarray, cover: CoverReset) -> None:
         draw_centered(frame, "RESET - uncover camera", h // 2, (0, 200, 0), 1.0)
 
 
+def draw_wearable(frame: np.ndarray, wearable: Wearable) -> None:
+    h, w = frame.shape[:2]
+    if not wearable.connected:
+        draw_text(frame, "phone OFFLINE", (w - 170, h - 20), WARN_COLOR, scale=0.55)
+        return
+    hit = wearable.last_impact
+    if hit is not None and time.perf_counter() - hit.t < 3.0:
+        draw_text(frame, f"IMPACT {hit.peak / 9.81:.1f} g", (w - 190, h - 20),
+                  WARN_COLOR, scale=0.7)
+    else:
+        draw_text(frame, f"phone {wearable.accel:4.1f} m/s2", (w - 190, h - 20), scale=0.55)
+
+
 def draw_overlay(frame: np.ndarray, lms: Landmarks | None, feats: Features | None,
                  det: FallDetector, fps: float, min_visibility: float,
-                 cover: CoverReset | None = None) -> None:
+                 cover: CoverReset | None = None, wearable: Wearable | None = None) -> None:
     if lms is not None:
         draw_skeleton(frame, lms, min_visibility)
     if feats is not None:
@@ -106,6 +122,8 @@ def draw_overlay(frame: np.ndarray, lms: Landmarks | None, feats: Features | Non
     draw_state(frame, det)
     if cover is not None:
         draw_cover(frame, cover)
+    if wearable is not None:
+        draw_wearable(frame, wearable)
 
     h, w = frame.shape[:2]
     draw_text(frame, f"FPS {fps:5.1f}", (w - 130, 25))
