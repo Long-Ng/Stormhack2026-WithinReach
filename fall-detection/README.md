@@ -30,11 +30,30 @@ Invoke-WebRequest "$base/pose_landmarker_full/float16/latest/pose_landmarker_ful
 
 ```powershell
 cd fall-detection
-python main.py                # webcam 0
+python main.py                # DroidCam phone if streaming, else webcam 0
 python main.py --source clip.mp4
 python main.py --params other.toml
 pytest
 ```
+
+## Phone camera (DroidCam)
+
+With the DroidCam Windows client installed and the phone app streaming,
+`python main.py` uses the phone automatically. The "DroidCam Video" device is
+always listed, but with no phone it only sends a placeholder card and then solid
+green, so the program waits up to `droidcam_probe_s` for real frames and
+otherwise falls back to `camera_index`. Set `prefer_droidcam = false` in
+`params.toml` to skip the check. DroidCam opens only through Media Foundation
+(DirectShow raises an error), so cameras try DirectShow first, then MSMF.
+
+Without the client, use the phone's Wi-Fi stream directly:
+`python main.py --source http://<phone-ip>:4747/video`
+
+## Events
+
+A confirmed fall prints one line, appends one JSON object to `events/events.jsonl`,
+and saves the frame (with skeleton) as `events/<date-time>.jpg`. To add an alert
+channel, write a class with `send(event)` and add it to `sinks` in `main.py`.
 
 ## Tuning
 

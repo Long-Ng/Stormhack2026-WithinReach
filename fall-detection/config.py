@@ -10,6 +10,7 @@ from pathlib import Path
 
 MODELS_DIR = Path(__file__).parent / "models"
 DEFAULT_PARAMS = Path(__file__).parent / "params.toml"
+PATH_KEYS = {"model_path", "events_dir"}  # relative values resolve against the params file
 
 
 @dataclass
@@ -22,7 +23,11 @@ class Config:
     min_tracking_confidence: float = 0.5
 
     # Capture
-    camera_index: int = 0
+    camera_index: int = 0  # used when no DroidCam phone is streaming
+    prefer_droidcam: bool = True  # with no --source, use a connected DroidCam phone if there is one
+    droidcam_probe_s: float = 3.0  # how long to wait for a real picture from DroidCam at startup
+    placeholder_max_std: float = 5.0  # frames this flat are DroidCam's "no phone" placeholder
+    droidcam_live_frames: int = 3  # distinct real frames needed to count DroidCam as streaming
     frame_width: int = 640
     frame_height: int = 480
 
@@ -46,6 +51,9 @@ class Config:
     recover_s: float = 1.0  # upright time to reset to UPRIGHT
     lost_grace_s: float = 1.0  # pose-loss tolerance while down
     slow_fall_s: float = 15.0  # down this long without a fast descent -> prolonged_lying
+
+    # Events
+    events_dir: str = str(Path(__file__).parent / "events")  # events.jsonl + snapshots
 
     # Display
     fps_smoothing: float = 0.9  # EMA factor for the FPS readout
@@ -82,9 +90,9 @@ class Config:
             want = types[key]
             if want is float and isinstance(value, int) and not isinstance(value, bool):
                 value = float(value)
-            if not isinstance(value, want) or isinstance(value, bool):
+            if not isinstance(value, want) or (isinstance(value, bool) and want is not bool):
                 raise ValueError(f"{path}: '{key}' should be {want.__name__}, got {value!r}")
-            if key == "model_path" and not Path(value).is_absolute():
+            if key in PATH_KEYS and not Path(value).is_absolute():
                 value = str(path.parent / value)  # relative to the params file, not the cwd
             setattr(cfg, key, value)
         return cfg

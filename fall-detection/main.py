@@ -1,7 +1,8 @@
 """Fall detection entry point.
 
-    python main.py                    # webcam 0, overlay on
+    python main.py                    # DroidCam phone if streaming, else webcam 0
     python main.py --source 1         # other camera index
+    python main.py --source http://192.168.1.5:4747/video  # DroidCam over Wi-Fi
     python main.py --source clip.mp4  # replay a video file
     python main.py --log-features f.csv  # dump per-frame features for tuning
     python main.py --no-display       # headless
@@ -17,10 +18,12 @@ import time
 
 import cv2
 
+from camera import open_source
 from config import Config
 from detector import FallDetector
+from events import ConsoleSink, FallEvent, FileSink, dispatch, save_snapshot
 from features import FeatureExtractor, FeatureLogger
-from overlay import draw_overlay
+from overlay import draw_overlay, draw_skeleton
 from pose import PoseEstimator
 
 WINDOW = "Fall Detection"
@@ -29,7 +32,7 @@ WINDOW = "Fall Detection"
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Camera-based fall detection")
     p.add_argument("--source", default=None,
-                   help="camera index (e.g. 0, 1) or path to a video file")
+                   help="camera index (e.g. 0, 1), stream URL, or path to a video file")
     p.add_argument("--log-features", metavar="CSV", default=None,
                    help="write per-frame features to a CSV file")
     p.add_argument("--params", metavar="TOML", default=None,
@@ -38,26 +41,30 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def open_source(source: str | None, cfg: Config) -> tuple[cv2.VideoCapture, bool]:
-    """Return (capture, is_file)."""
-    if source is None or source.isdigit():
-        index = cfg.camera_index if source is None else int(source)
-        cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)  # DirectShow opens fast on Windows
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, cfg.frame_width)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cfg.frame_height)
-        return cap, False
-    return cv2.VideoCapture(source), True
+def handle_detection(detection, frame, lms, cfg: Config, sinks) -> None:
+    """Snapshot the frame (with skeleton, before the debug text) and send the event."""
+    now = time.time()
+    snap = frame.copy()
+    if lms is not None:
+        draw_skeleton(snap, lms, cfg.min_visibility)
+    try:
+        snapshot_path = save_snapshot(snap, cfg.events_dir, now)
+    except Exception as e:
+        print(f"snapshot failed: {e!r}", file=sys.stderr)
+        snapshot_path = None
+    dispatch(FallEvent.from_detection(detection, now, snapshot_path), sinks)
 
 
 def main() -> int:
     args = parse_args()
     cfg = Config.load(args.params) if args.params else Config.load()
 
-    cap, is_file = open_source(args.source, cfg)
+    source = open_source(args.source, cfg)
+    cap, is_file = source.cap, source.is_file
     if not cap.isOpened():
-        print(f"Could not open source: {args.source if args.source is not None else cfg.camera_index}",
-              file=sys.stderr)
+        print(f"Could not open {source.label}", file=sys.stderr)
         return 1
+    print(f"Using {source.label}")
 
     fps = 0.0
     last_wall = time.perf_counter()
@@ -65,6 +72,8 @@ def main() -> int:
 
     extractor = FeatureExtractor(cfg)
     detector = FallDetector(cfg)
+    # Add new alert channels here; nothing else needs to change.
+    sinks = [ConsoleSink(), FileSink(cfg.events_dir)]
 
     with contextlib.ExitStack() as stack:
         estimator = stack.enter_context(PoseEstimator(cfg))
@@ -84,9 +93,7 @@ def main() -> int:
             feats = extractor.update(lms, ts_ms / 1000.0)
             detection = detector.update(feats, ts_ms / 1000.0)
             if detection is not None:
-                # Placeholder until the sinks land in milestone 4.
-                print(f"[{detection.t:7.2f}s] {detection.kind.upper()}  "
-                      f"peak_vel={detection.peak_hip_vel:.2f}  angle={detection.torso_angle:.0f}")
+                handle_detection(detection, frame, lms, cfg, sinks)
             if logger is not None:
                 logger.log(ts_ms / 1000.0, feats)
 
