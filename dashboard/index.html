@@ -1,206 +1,290 @@
 <!DOCTYPE html>
-<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Fall & Stroke Warning System</title>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fall alert dashboard</title>
+<!-- fd-no-inject -->
 <style>
-:root{--bg:#eef3fb;--card:#fff;--tx:#1e2a44;--mut:#6b7a99;--pri:#2f6bff;--ok:#16a34a;--warn:#f59e0b;--bad:#e5484d;--line:#e6ecf7}
-*{box-sizing:border-box}body{margin:0;font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--tx)}
-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 24px;background:#fff;border-bottom:1px solid var(--line);flex-wrap:wrap}
-.brand{display:flex;gap:12px;align-items:center}.logo{width:46px;height:46px;border-radius:12px;background:#0f2a5c;display:grid;place-items:center;font-size:24px}
-.brand h1{margin:0;font-size:21px;color:#1b3a7a}.brand small{color:var(--mut)}
-.pills{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.pill{background:#fff;border:1px solid var(--line);border-radius:99px;padding:8px 16px;font-size:13px;display:flex;gap:8px;align-items:center;box-shadow:0 2px 6px #1b3a7a10}
-.dot{width:9px;height:9px;border-radius:50%;background:var(--bad);display:inline-block}.dot.on{background:var(--ok)}
-#clockP{font-family:ui-monospace,Consolas,monospace;background:#e9f0ff;color:#1b3a7a;font-size:15px}
-button{font:inherit;border:0;border-radius:10px;padding:8px 14px;cursor:pointer;background:var(--pri);color:#fff}
-button.ghost{background:#eaf0ff;color:var(--pri);border:1px solid #c9d8ff}button.g{background:#eef1f7;color:var(--tx)}
-.layout{display:grid;grid-template-columns:200px 1fr}
-nav{background:#f6f9ff;border-right:1px solid var(--line);padding:16px 12px;display:flex;flex-direction:column;gap:6px;min-height:calc(100vh - 78px)}
-nav a{padding:12px 14px;border-radius:10px;color:var(--tx);text-decoration:none;font-size:15px}nav a:hover{background:#e2ebff;color:var(--pri)}
-.sys{margin-top:auto;background:#fff;border-radius:10px;padding:10px 12px;font-size:13px}.sys small{color:var(--mut)}
-main{padding:20px;display:grid;grid-template-columns:1.5fr 1fr;gap:18px;align-content:start}
-.card{background:var(--card);border-radius:16px;padding:16px;box-shadow:0 4px 16px #1b3a7a0d}
-.card h2{margin:0;font-size:16px;display:flex;align-items:center;gap:10px}
-.bar{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
-.tag{font-size:11px;padding:3px 10px;border-radius:99px;background:#e4f6ea;color:var(--ok)}.tag.bad{background:#fdeaea;color:var(--bad)}
-.live{font-size:13px;padding:5px 12px;border-radius:99px;background:#eef1f7;color:var(--mut)}.live.on{background:#e4f6ea;color:var(--ok)}
-.stageWrap{background:#000;border-radius:12px;overflow:hidden}
-.stage{position:relative;margin:0 auto;width:100%;aspect-ratio:4/3;max-height:64vh;background:#000}
-.stage img.v{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none}
-.ts,.camname{position:absolute;top:10px;font-family:ui-monospace,Consolas,monospace;font-size:13px;color:#fff;background:#0008;padding:4px 10px;border-radius:6px;z-index:2}
-.ts{left:10px}.camname{right:10px;font-family:inherit}
-#msg{position:absolute;inset:0;display:grid;place-items:center;color:#9fb0d0;text-align:center;padding:20px}
-#frame{position:absolute;inset:0;border:5px solid var(--bad);display:none;pointer-events:none;z-index:1;animation:pulse 1s infinite}
-#frame span{position:absolute;left:0;top:44px;background:var(--bad);color:#fff;font-weight:700;font-size:15px;padding:6px 14px}
-.stage.alert #frame{display:block}
-@keyframes pulse{50%{box-shadow:inset 0 0 28px var(--bad)}}
-.ctrl{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
-.alertcard{display:flex;gap:16px;border:1px solid var(--line);border-radius:12px;padding:14px}
-.thumb{width:190px;height:150px;border-radius:10px;background:#dfe7f7 center/cover no-repeat;flex:none;display:grid;place-items:center;color:var(--mut);font-size:12px;text-align:center;cursor:zoom-in}
-.ainfo{flex:1;display:flex;flex-direction:column;gap:7px;font-size:14px}.ainfo b{font-size:15px}
-.sent{display:inline-block;background:#eef1f7;color:var(--mut);padding:5px 12px;border-radius:8px;font-size:13px}
-.btns{display:grid;grid-template-columns:1.2fr 1fr;gap:12px;margin-top:12px}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.stats2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
-.stat{border:1px solid var(--line);border-radius:12px;padding:12px;font-size:13px;color:var(--mut)}
-.stat b{display:block;font-size:26px;margin-top:6px;color:var(--ok)}.stat.red b{color:var(--bad)}.stat.blue b{color:var(--pri)}
-table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:8px;text-align:left;vertical-align:middle}th{color:var(--mut);font-weight:500;background:#f5f8fe}
-tr+tr td{border-top:1px solid var(--line)}.st{padding:3px 10px;border-radius:8px;font-size:12px}.st.p{background:#fdeaea;color:var(--bad)}.st.d{background:#e4f6ea;color:var(--ok)}
-td img{width:72px;height:54px;object-fit:cover;border-radius:6px;cursor:zoom-in;display:block}
-.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
-.gal div{position:relative}.gal img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px;cursor:zoom-in;display:block}
-.gal small{position:absolute;left:6px;bottom:6px;background:#000a;color:#fff;border-radius:6px;padding:2px 6px;font-size:11px}
-#settings{display:none;position:fixed;top:78px;right:20px;z-index:20;width:340px;max-width:92vw;background:#fff;border-radius:14px;padding:16px;box-shadow:0 10px 40px #0003;flex-direction:column;gap:8px}
-input{font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px}
-#banner{display:none;position:fixed;top:0;left:0;right:0;background:var(--bad);color:#fff;padding:14px;text-align:center;font-weight:700;font-size:18px;z-index:30;cursor:pointer}
-#lb{display:none;position:fixed;inset:0;background:#000d;z-index:40;place-items:center;cursor:zoom-out}#lb img{max-width:92vw;max-height:92vh;border-radius:10px}
-.mut{color:var(--mut);font-size:13px}
-@media(max-width:1000px){.layout{grid-template-columns:1fr}nav{flex-direction:row;overflow:auto;min-height:0}.sys{display:none}main{grid-template-columns:1fr}.alertcard{flex-direction:column}.thumb{width:100%}}
-</style></head><body>
-<div id="banner"></div><div id="lb"><img id="lbImg" alt=""></div>
-<header>
- <div class="brand"><div class="logo">🛡️</div><div><h1>FALL &amp; STROKE WARNING SYSTEM</h1><small>Real-time Video Intelligence &amp; Safety Surveillance</small></div></div>
- <div class="pills">
-  <div class="pill"><span class="dot" id="dSrv"></span><span id="tSrv">Máy chủ: Mất kết nối</span></div>
-  <div class="pill"><span class="dot" id="dCam"></span><span id="tCam">Camera: Tắt</span></div>
-  <div class="pill" id="clockP">--:--:--</div>
-  <button class="ghost" id="setBtn">⚙ Cài đặt</button>
- </div>
-</header>
-<div id="settings">
- <b>Cài đặt</b>
- <label class="mut">Địa chỉ máy chủ main.py</label><input id="base" placeholder="http://localhost:5000">
- <label class="mut">Số điện thoại khẩn cấp</label><input id="tel" value="911">
- <label class="mut">Tên phòng / camera</label><input id="roomIn" value="Phòng khách">
- <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap"><button id="save">Lưu</button><button class="g" id="sim">Mô phỏng cảnh báo</button></div>
-</div>
-<div class="layout">
-<nav>
- <a href="#live">🎥 Video trực tiếp</a><a href="#alertbox">🚨 Cảnh báo</a><a href="#history">🕘 Lịch sử cảnh báo</a><a href="#moments">📸 Khoảnh khắc đã lưu</a><a href="#stats">📊 Thống kê</a>
- <div class="sys"><span class="dot on"></span> Hệ thống hoạt động<br><small>Phiên bản 0.2.0</small></div>
-</nav>
+:root{
+  --bg:#f5f5f1; --card:#fff; --ink:#14231f; --muted:#5d6b66; --line:#e7e9e4;
+  --green:#14532d; --greenbg:#e5f0ea; --red:#b42318; --reddk:#8f1a12; --amber:#c27a0e; --amberbg:#fdf3dc; --amberln:#e8b84a;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);display:flex;min-height:100vh}
+button{font:inherit;cursor:pointer}
+aside{width:226px;background:#fff;border-right:1px solid var(--line);padding:24px 16px;position:sticky;top:0;height:100vh;flex-shrink:0}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;margin:0 8px 26px}
+.logo{width:34px;height:34px;border-radius:9px;background:var(--green);display:grid;place-items:center}
+.nav a{display:flex;align-items:center;gap:12px;padding:12px;border-radius:10px;color:var(--ink);text-decoration:none;font-weight:600;font-size:15px;margin-bottom:6px;cursor:pointer}
+.nav a.active{background:#fbe7e4;color:var(--reddk)}
+.nav a .badge{margin-left:auto;background:var(--red);color:#fff;border-radius:999px;min-width:22px;height:22px;display:none;place-items:center;font-size:12px;padding:0 6px}
+.nav svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+main{flex:1;padding:26px 28px;max-width:1260px}
+.banner{border-radius:20px;padding:22px 26px;display:flex;align-items:center;gap:20px;color:#fff;margin-bottom:22px;background:var(--red)}
+.banner.ok{background:var(--green)}
+.banner .ico{width:56px;height:56px;border-radius:14px;background:rgba(255,255,255,.18);display:grid;place-items:center;flex-shrink:0}
+.banner .ico svg{width:30px;height:30px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.banner .t{flex:1}
+.banner .k{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;opacity:.92}
+.banner h1{margin:2px 0 4px;font-size:28px;line-height:1.15}
+.banner .s{opacity:.92;font-size:15px}
+.timer{background:var(--reddk);border-radius:14px;padding:12px 22px;text-align:center;min-width:210px}
+.timer small{display:block;font-size:13px;font-weight:600}
+.timer b{font-size:36px;font-variant-numeric:tabular-nums}
+.banner.ok .timer{display:none}
+.grid{display:grid;grid-template-columns:1fr 400px;gap:22px}
+.card{background:var(--card);border-radius:20px;padding:20px}
+.card h3{margin:0 0 14px;font-size:20px}
+.video{background:#1f2a28;border-radius:22px;position:relative;overflow:hidden;aspect-ratio:16/9;display:grid;place-items:center}
+.video img{width:100%;height:100%;object-fit:contain;display:block}
+.chip{position:absolute;top:14px;background:rgba(0,0,0,.65);color:#fff;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:700}
+.chip.live{left:14px}.chip.live i{display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff4d3d;margin-right:6px}
+.chip.time{right:14px}
+.chip.tag{left:50%;bottom:14px;transform:translateX(-50%);background:#f2b53a;color:#3b2a00;display:none}
+.vmsg{position:absolute;color:#aab7b2;font-size:15px;text-align:center;padding:20px}
+.btn{width:100%;border-radius:12px;padding:15px;font-size:19px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:10px;border:2px solid #cfd5d1;background:#fff;color:var(--ink);margin-bottom:12px;text-decoration:none}
+.btn.talk.on{background:var(--greenbg);border-color:var(--green)}
+.btn.call{background:var(--red);border-color:var(--red);color:#fff}
+.btn svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.disp{background:#f3f4f1;border-radius:12px;padding:12px 14px;font-size:14px}
+.disp small{display:block;color:var(--muted);font-weight:600;margin-bottom:2px}
+.disp b{font-size:16px}
+.resp{display:flex;align-items:center;gap:12px;padding:9px 0}
+.av{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-weight:700;background:var(--greenbg);color:var(--green)}
+.av.b{background:#fbeccd;color:#8a5a00}.av.c{background:#e5e8f5;color:#3b4a8a}
+.resp .n{font-weight:600}.resp .st{margin-left:auto;font-size:13px;color:var(--muted)}.resp .st.go{color:var(--green);font-weight:700}
+.row2{display:grid;grid-template-columns:1fr 400px;gap:22px;margin-top:22px}
+.upd{display:flex;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--line);font-size:15px}
+.upd:first-of-type{border-top:0}
+.upd .w{width:70px;color:var(--muted);font-size:14px;flex-shrink:0}
+.dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;background:#7a8984}
+.dot.red{background:var(--red)}.dot.amber{background:var(--amber)}
+.upd .x{font-weight:600}
+.head{display:flex;justify-content:space-between;align-items:center}
+.livechip{font-size:13px;color:var(--muted)}.livechip:before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--red);margin-right:6px}
+.notice{background:var(--amberbg);border:2px solid var(--amberln);border-radius:20px;padding:20px;display:flex;flex-direction:column;min-height:240px}
+.notice .k{font-size:13px;font-weight:700;color:#8a5a00;letter-spacing:.05em;text-transform:uppercase}
+.notice h4{margin:6px 0 10px;font-size:21px;line-height:1.25}
+.notice p{margin:0;color:#4a3d1c;font-size:15px;line-height:1.45}
+.notice a{margin-top:auto;font-weight:700;color:#7a4c00;cursor:pointer;text-decoration:none}
+.shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}
+.shot{background:#f3f4f1;border-radius:14px;overflow:hidden;font-size:13px}
+.shot img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}
+.shot div{padding:8px 10px}
+.view{display:none}.view.show{display:block}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:10px;border-top:1px solid var(--line)}th{color:var(--muted);border-top:0}
+td img{width:90px;border-radius:8px;display:block}
+.form label{display:block;font-weight:600;margin:12px 0 4px}
+.form input{width:100%;padding:10px;border:1px solid #cfd5d1;border-radius:10px;font:inherit}
+.form button{margin-top:14px;padding:10px 18px;border:0;border-radius:10px;background:var(--green);color:#fff;font-weight:700}
+@media(max-width:1000px){.grid,.row2{grid-template-columns:1fr}aside{display:none}}
+</style>
+</head>
+<body>
+<aside>
+  <div class="brand"><div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/></svg></div><span id="appName">Fall Guard</span></div>
+  <nav class="nav">
+    <a data-v="dash" class="active"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard<span class="badge" id="navBadge">1</span></a>
+    <a data-v="cam"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10l6-3v10l-6-3z"/></svg>Live camera</a>
+    <a data-v="inc"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17.5v.01"/></svg>Incidents</a>
+    <a data-v="fam"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-4 3-6 6.5-6s6 2 6.5 6"/><path d="M16 4.5a3.5 3.5 0 010 7M18 14c2.2.6 3.4 2.6 3.5 6"/></svg>Family</a>
+    <a data-v="set"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Settings</a>
+  </nav>
+</aside>
+
 <main>
- <section class="card" id="live">
-  <div class="bar"><h2><span class="dot" id="camDot"></span> CAMERA 01 - <span id="camTitle">Phòng khách</span></h2><span class="live" id="liveTag">Ngoại tuyến</span></div>
-  <div class="stageWrap"><div class="stage" id="stage">
-    <img class="v" id="cam" alt="camera">
-    <div id="frame"><span>FALL DETECTED</span></div>
-    <div class="ts" id="ts">--</div><div class="camname">Camera 01</div>
-    <div id="msg">Đang chờ video từ main.py...</div>
-  </div></div>
-  <div class="ctrl"><button class="g" id="camGo">↻ Kết nối lại</button><button class="g" id="snap">📷 Chụp</button><button class="g" id="fs">⛶</button></div>
- </section>
-
- <section class="card" id="alertbox">
-  <div class="bar"><h2><span style="color:var(--bad)">⚡</span> CẢNH BÁO TÉ NGÃ <span class="tag" id="aTag">Bình thường</span></h2></div>
-  <div class="alertcard">
-   <div class="thumb" id="aThumb">Chưa có cảnh báo</div>
-   <div class="ainfo">
-    <b id="aCam">Camera 01 - Phòng khách</b>
-    <div>🕒 <span id="aTime">--</span></div>
-    <div>⏱ Đã trôi qua: <span id="aAgo">--</span></div>
-    <div>🖼 Ảnh lưu: <span id="aFile" style="word-break:break-all">--</span></div>
-    <div><span class="sent" id="aSent">🔔 Chưa có thông báo</span></div>
-   </div>
+  <div class="banner ok" id="banner">
+    <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17.5v.01"/></svg></div>
+    <div class="t">
+      <div class="k" id="bKicker">All clear</div>
+      <h1 id="bTitle">Monitoring</h1>
+      <div class="s" id="bSub"></div>
+    </div>
+    <div class="timer"><small>Automatic 911 call in</small><b id="count">1:00</b></div>
   </div>
-  <div class="btns"><button id="aDetail">Xem ảnh lớn</button><button class="ghost" id="aHandle">Xử lý</button></div>
-  <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="g" id="call">📞 Gọi khẩn cấp</button><button class="g" id="copy">📋 Sao chép tóm tắt</button></div>
- </section>
 
- <section class="card" id="history">
-  <div class="bar"><h2>🕘 LỊCH SỬ CẢNH BÁO</h2><button class="g" id="csv">Xuất CSV</button></div>
-  <table><thead><tr><th>ID</th><th>Ảnh</th><th>Thời gian</th><th>Loại</th><th>Trạng thái</th></tr></thead><tbody id="rows"></tbody></table>
-  <div id="scan" class="mut" style="margin-top:10px"></div>
- </section>
+  <section class="view show" id="v-dash">
+    <div class="grid">
+      <div class="video">
+        <span class="chip live"><i></i>LIVE</span><span class="chip time" id="clock">--:--:--</span>
+        <img id="cam" alt="Live camera">
+        <div class="vmsg" id="vmsg">Waiting for video from main.py...</div>
+        <span class="chip tag" id="vtag"></span>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:22px">
+          <h3 id="checkTitle">Check on person</h3>
+          <button class="btn talk" id="talk"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg><span>Hold to talk</span></button>
+          <a class="btn call" id="call911" href="tel:911"><svg viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z"/></svg>Call 911</a>
+          <div class="disp"><small>Tell the dispatcher</small><b id="dispText"></b></div>
+        </div>
+        <div class="card">
+          <h3>Who's responding</h3>
+          <div id="resp"></div>
+        </div>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="card">
+        <div class="head"><h3>Live updates</h3><span class="livechip">Live</span></div>
+        <div id="updates"></div>
+      </div>
+      <div class="notice">
+        <div class="k">What we noticed so far</div>
+        <h4 id="nTitle">No fall detected</h4>
+        <p id="nBody">The camera is watching. You will be alerted here if a fall is detected.</p>
+        <a data-v="inc" id="nLink">See the fall analysis &rarr;</a>
+      </div>
+    </div>
+  </section>
 
- <section class="card" id="stats">
-  <div class="bar"><h2>📊 THỐNG KÊ HỆ THỐNG</h2><span class="mut">Cập nhật: Real-time</span></div>
-  <div class="stats">
-   <div class="stat red">Tổng số cảnh báo<b id="sTotal">0</b></div>
-   <div class="stat">Đang giám sát<b id="sMon">0</b></div>
-   <div class="stat blue">Thời gian hoạt động<b id="sUp">0.0</b></div>
-  </div>
-  <div class="stats2"><div class="stat blue">Cảnh báo chưa xử lý<b id="sOpen">0</b></div><div class="stat red">Mức độ nguy cơ<b id="sRisk" style="color:var(--ok)">Thấp</b></div></div>
- </section>
+  <section class="view" id="v-cam"><div class="card"><h3 id="camTitle">Live camera</h3><div class="video"><img id="cam2" alt="Live camera"></div></div></section>
 
- <section class="card" id="moments" style="grid-column:1/-1">
-  <div class="bar"><h2>📸 KHOẢNH KHẮC ĐÃ LƯU</h2><span class="mut">Ảnh do events.py lưu khi phát hiện té ngã (thư mục events/)</span></div>
-  <div class="gal" id="gal"><span class="mut">Chưa có ảnh nào.</span></div>
- </section>
+  <section class="view" id="v-inc">
+    <div class="card"><h3>Incidents</h3>
+      <table><thead><tr><th>Photo</th><th>Time</th><th>Type</th><th>Status</th></tr></thead><tbody id="incBody"></tbody></table>
+      <p id="incEmpty" style="color:var(--muted)">No incidents yet.</p>
+    </div>
+    <div class="card" style="margin-top:22px"><h3>Saved moments</h3><div class="shots" id="shots"></div></div>
+  </section>
+
+  <section class="view" id="v-fam"><div class="card"><h3>Family</h3><div id="famList"></div></div></section>
+
+  <section class="view" id="v-set"><div class="card form"><h3>Settings</h3>
+    <label>App name</label><input id="sApp">
+    <label>Person being monitored</label><input id="sName">
+    <label>Room</label><input id="sRoom">
+    <label>Home address</label><input id="sAddr">
+    <label>Family member B</label><input id="sB">
+    <label>Family member C</label><input id="sC">
+    <label>Auto-call countdown (seconds)</label><input id="sSecs" type="number" min="10" max="300">
+    <button id="save">Save</button>
+  </div></section>
 </main>
-</div>
+
 <script>
-const $=id=>document.getElementById(id);
-const cfg=JSON.parse(localStorage.getItem('fsw3')||'{}');
-const DEF=location.protocol.startsWith('http')?'':'http://localhost:5000';
-let BASE=(cfg.base!==undefined?cfg.base:DEF);
-$('base').value=BASE||'http://localhost:5000';if(cfg.tel)$('tel').value=cfg.tel;if(cfg.room)$('roomIn').value=cfg.room;
-let ROOM=$('roomIn').value;
-const startT=Date.now();let events=[],seen=new Set(),handled=new Set(JSON.parse(localStorage.getItem('fsw3h')||'[]')),first=true,srvOK=false,skew=0,currentName=null;
-const ACTIVE_S=30;const nowS=()=>Date.now()/1000-skew;
-const pad=n=>String(n).padStart(2,'0');
-const fmtT=d=>`${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-const fmtDT=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${fmtT(d)}`;
-const fmtD=d=>`${fmtT(d)} - ${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
-const dot=(id,on)=>$(id).className='dot'+(on?' on':'');
-const ago=s=>s<60?Math.round(s)+' giây':s<3600?Math.floor(s/60)+' phút '+Math.round(s%60)+' giây':Math.floor(s/3600)+' giờ '+Math.floor(s%3600/60)+' phút';
-function beep(){try{const c=new AudioContext(),o=c.createOscillator();o.connect(c.destination);o.frequency.value=880;o.start();setTimeout(()=>o.stop(),600)}catch(e){}}
-$('setBtn').onclick=()=>{const s=$('settings');s.style.display=s.style.display==='flex'?'none':'flex'};
-$('save').onclick=()=>{BASE=$('base').value.trim().replace(/\/$/,'');ROOM=$('roomIn').value;
- localStorage.setItem('fsw3',JSON.stringify({base:BASE,tel:$('tel').value,room:ROOM}));$('camTitle').textContent=ROOM;connectCam();poll()};
-$('camTitle').textContent=ROOM;
+(function(){
+  var D = {app:"Fall Guard", name:"Alex", room:"Living room", addr:"123 Main St", b:"Family member B", c:"Family member C", secs:60};
+  try{ var s = JSON.parse(localStorage.getItem("fd-settings")||"{}"); for(var k in s) D[k]=s[k]; }catch(e){}
+  function $(id){return document.getElementById(id);}
+  var alertSince = null, lastData = {events:[], alert:false}, logExtra = [], talk = false, seen = {};
 
-function camState(on){dot('dCam',on);dot('camDot',on);$('tCam').textContent='Camera: '+(on?'Trực tuyến':'Tắt');$('liveTag').textContent=on?'● Trực tuyến':'Ngoại tuyến';$('liveTag').className='live'+(on?' on':'')}
-function connectCam(){const im=$('cam');
- im.onload=()=>{im.style.display='block';$('msg').style.display='none';camState(true)};
- im.onerror=()=>{im.style.display='none';$('msg').style.display='grid';$('msg').textContent='Chưa nhận được video. Hãy chạy main.py rồi mở http://localhost:5000/';camState(false);
-  clearTimeout(window._ct);window._ct=setTimeout(connectCam,3000)};
- im.src=BASE+'/video?t='+Date.now()}
-$('camGo').onclick=connectCam;
-$('fs').onclick=()=>$('stage').requestFullscreen&&$('stage').requestFullscreen();
-$('snap').onclick=()=>{const im=$('cam');if(!im.naturalWidth)return;const c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;
- try{c.getContext('2d').drawImage(im,0,0);const a=document.createElement('a');a.href=c.toDataURL('image/jpeg',.9);a.download='snapshot-'+Date.now()+'.jpg';a.click()}catch(e){window.open(BASE+'/snapshot','_blank')}};
+  function fmtTime(t){return new Date(t*1000).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});}
+  function ago(sec){ sec=Math.max(0,Math.round(sec)); if(sec<60) return sec+"s ago"; var m=Math.floor(sec/60); return m+":"+("0"+(sec%60)).slice(-2)+" ago"; }
+  function kindLabel(k){ return k==="prolonged_lying" ? "Prolonged lying" : "Fall"; }
 
-async function poll(){
- try{const r=await fetch(BASE+'/events.json',{cache:'no-store'});const j=await r.json();
-  skew=Date.now()/1000-j.now;srvOK=true;
-  const list=j.events.map(e=>({...e,date:new Date(e.t*1000)}));
-  const fresh=[];
-  for(const e of list){if(!seen.has(e.name)){seen.add(e.name);if(!first)fresh.push(e);else if(nowS()-e.t>ACTIVE_S+5)handled.add(e.name)}}
-  events=list;
-  if(fresh.length)newAlert(fresh[fresh.length-1]);
-  first=false;
- }catch(e){srvOK=false}
- dot('dSrv',srvOK);$('tSrv').textContent='Máy chủ: '+(srvOK?'Kết nối':'Mất kết nối');render()}
-function newAlert(e){currentName=e.name;handled.delete(e.name);saveH();
- $('banner').style.display='block';$('banner').textContent='⚠ PHÁT HIỆN TÉ NGÃ – '+ROOM+' – '+fmtT(e.date);beep();if(navigator.vibrate)navigator.vibrate([300,150,300])}
-function saveH(){localStorage.setItem('fsw3h',JSON.stringify([...handled].slice(-200)))}
-const curEvent=()=>{const l=[...events].reverse();return l.find(e=>e.name===currentName)||l[0]||null};
-function render(){
- const list=[...events].reverse(),cur=curEvent();
- const open=list.filter(e=>!handled.has(e.name));
- const active=!!cur&&!handled.has(cur.name)&&(nowS()-cur.t)<ACTIVE_S;
- $('stage').className='stage'+(active?' alert':'');
- if(cur){const p=!handled.has(cur.name);
-  $('aCam').textContent='Camera 01 - '+ROOM;$('aTime').textContent=fmtD(cur.date);$('aAgo').textContent=ago(Math.max(0,nowS()-cur.t));$('aFile').textContent=cur.name;
-  const t=$('aThumb');t.style.backgroundImage=`url(${BASE+cur.url})`;t.textContent='';t.onclick=()=>zoom(BASE+cur.url);
-  $('aTag').textContent=p?'Đang xử lý':'Đã xử lý';$('aTag').className='tag'+(p?' bad':'');
-  $('aSent').textContent=p?'🔔 Đã gửi thông báo':'✔ Đã xử lý';$('aSent').style.background=p?'#fdeaea':'#e4f6ea';$('aSent').style.color=p?'#e5484d':'#16a34a'}
- $('rows').innerHTML=list.length?list.map((e,i)=>`<tr><td>#${String(list.length-i).padStart(3,'0')}</td><td><img src="${BASE+e.url}" onclick="zoom('${BASE+e.url}')"></td><td>${fmtD(e.date)}</td><td><span class="st p">Té ngã</span></td><td><span class="st ${handled.has(e.name)?'d':'p'}">${handled.has(e.name)?'Đã xử lý':'Đang xử lý'}</span></td></tr>`).join(''):'<tr><td colspan="5" class="mut">Chưa có cảnh báo nào</td></tr>';
- $('gal').innerHTML=list.length?list.map(e=>`<div><img src="${BASE+e.url}" loading="lazy" onclick="zoom('${BASE+e.url}')"><small>${fmtT(e.date)}</small></div>`).join(''):'<span class="mut">Chưa có ảnh nào.</span>';
- $('sTotal').textContent=list.length;$('sOpen').textContent=open.length;$('sMon').textContent=srvOK&&$('cam').style.display==='block'?1:0;
- const m=(Date.now()-startT)/60000;$('sUp').textContent=m<60?m.toFixed(1)+' phút':(m/60).toFixed(1)+' giờ';
- $('sRisk').textContent=active?'Cao':open.length?'Trung bình':'Thấp';$('sRisk').style.color=active?'#e5484d':open.length?'#f59e0b':'#16a34a';
- $('scan').innerHTML=active?'<span class="dot"></span> Phát hiện người nằm bất động!':'<span class="dot on"></span> Đang quét tìm đối tượng trong phòng...';
- if(!open.length&&!active)$('banner').style.display='none'}
-function zoom(u){$('lbImg').src=u;$('lb').style.display='grid'}$('lb').onclick=()=>$('lb').style.display='none';
-$('aHandle').onclick=()=>{const c=curEvent();if(!c)return;handled.add(c.name);saveH();render()};
-$('aDetail').onclick=()=>{const c=curEvent();if(c)zoom(BASE+c.url)};
-$('banner').onclick=()=>$('banner').style.display='none';
-$('call').onclick=()=>location.href='tel:'+$('tel').value;
-$('copy').onclick=()=>{const c=curEvent();if(!c)return;navigator.clipboard.writeText(`Phát hiện té ngã lúc ${fmtD(c.date)} tại ${ROOM}. Đã trôi qua ${ago(Math.max(0,nowS()-c.t))}. Ảnh: ${c.name}`)};
-$('csv').onclick=()=>{const list=[...events].reverse();const c='id,time,file,status\n'+list.map((e,i)=>[list.length-i,e.date.toISOString(),e.name,handled.has(e.name)?'handled':'processing'].join(',')).join('\n');
- const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([c],{type:'text/csv'}));a.download='alerts.csv';a.click()};
-$('sim').onclick=()=>{const e={name:'sim-'+Date.now()+'.jpg',t:nowS(),url:'/snapshot',date:new Date()};events.push(e);seen.add(e.name);newAlert(e);render()};
-setInterval(()=>{const n=new Date();$('clockP').textContent=fmtT(n);$('ts').textContent=fmtDT(n);render()},1000);
-setInterval(poll,1500);
-connectCam();poll();
-</script></body></html>
+  function applySettings(){
+    $("appName").textContent = D.app;
+    $("checkTitle").textContent = "Check on " + D.name;
+    $("dispText").textContent = D.name + " \u00B7 " + D.addr;
+    $("camTitle").textContent = "Live camera \u00B7 " + D.room;
+    $("sApp").value=D.app; $("sName").value=D.name; $("sRoom").value=D.room; $("sAddr").value=D.addr;
+    $("sB").value=D.b; $("sC").value=D.c; $("sSecs").value=D.secs;
+    $("resp").innerHTML =
+      '<div class="resp"><div class="av">A</div><span class="n">You</span><span class="st go">Watching</span></div>'+
+      '<div class="resp"><div class="av b">B</div><span class="n">'+D.b+'</span><span class="st">'+(lastData.alert?"Alert not opened":"Notified when needed")+'</span></div>'+
+      '<div class="resp"><div class="av c">C</div><span class="n">'+D.c+'</span><span class="st">'+(lastData.alert?"Alert not opened":"Notified when needed")+'</span></div>';
+    $("famList").innerHTML = $("resp").innerHTML;
+  }
+  $("save").onclick = function(){
+    D.app=$("sApp").value; D.name=$("sName").value; D.room=$("sRoom").value; D.addr=$("sAddr").value;
+    D.b=$("sB").value; D.c=$("sC").value; D.secs=parseInt($("sSecs").value)||60;
+    localStorage.setItem("fd-settings", JSON.stringify(D)); applySettings();
+  };
+
+  document.querySelectorAll("[data-v]").forEach(function(a){
+    a.onclick = function(){
+      var v = a.getAttribute("data-v");
+      document.querySelectorAll(".view").forEach(function(x){x.classList.remove("show");});
+      $("v-"+v).classList.add("show");
+      document.querySelectorAll(".nav a").forEach(function(x){x.classList.toggle("active", x.getAttribute("data-v")===v);});
+    };
+  });
+
+  $("talk").onmousedown = $("talk").ontouchstart = function(){ talk=true; $("talk").classList.add("on"); $("talk").lastChild.textContent="Talking..."; logExtra.unshift({t:Date.now()/1000, text:"You started talking to "+D.name, c:""}); };
+  $("talk").onmouseup = $("talk").onmouseleave = $("talk").ontouchend = function(){ if(talk){ talk=false; $("talk").classList.remove("on"); $("talk").lastChild.textContent="Hold to talk"; } };
+
+  function startVideo(){
+    ["cam","cam2"].forEach(function(id){
+      var img=$(id); img.onload=function(){ $("vmsg").style.display="none"; };
+      img.onerror=function(){ $("vmsg").style.display="block"; $("vmsg").textContent="Waiting for video from main.py..."; setTimeout(function(){ img.src="/video?"+Date.now(); }, 2000); };
+      img.src="/video";
+    });
+  }
+
+  function render(d){
+    lastData = d;
+    var ev = d.events || [];
+    var latest = ev.length ? ev[ev.length-1] : null;
+    var on = !!d.alert;
+    var banner = $("banner");
+    banner.classList.toggle("ok", !on);
+    $("navBadge").style.display = on ? "grid" : "none";
+    $("vtag").style.display = on && latest ? "block" : "none";
+    if(on && latest) $("vtag").textContent = kindLabel(latest.kind)+" \u00B7 "+fmtTime(latest.t);
+
+    if(on){
+      if(alertSince===null) alertSince = Date.now();
+      $("bKicker").textContent = (d.alert_text || "Fall detected") + (latest ? " \u00B7 " + ago(d.now - latest.t).toUpperCase() : "");
+      $("bTitle").textContent = D.name + " may have fallen and isn't responding";
+      $("bSub").textContent = D.room + " \u00B7 " + D.addr;
+    } else {
+      alertSince = null;
+      $("bKicker").textContent = "All clear";
+      $("bTitle").textContent = D.name + " is being monitored";
+      $("bSub").textContent = D.room + " \u00B7 No fall detected right now";
+    }
+
+    var rows = [];
+    if(on) rows.push({t:d.now, text:"No movement since the fall", c:"amber"});
+    ev.slice().reverse().slice(0,6).forEach(function(e){
+      rows.push({t:e.t, text:kindLabel(e.kind)+" detected in the "+D.room.toLowerCase(), c:"red"});
+      rows.push({t:e.t+1, text:"Alert sent to you, "+D.b+" and "+D.c, c:""});
+    });
+    logExtra.slice(0,3).forEach(function(x){rows.push(x);});
+    rows.sort(function(a,b){return b.t-a.t;});
+    $("updates").innerHTML = rows.length ? rows.slice(0,8).map(function(r,i){
+      return '<div class="upd"><span class="w">'+(i===0&&Date.now()/1000-r.t<30?"Now":fmtTime(r.t))+'</span><span class="dot '+r.c+'"></span><span class="x">'+r.text+'</span></div>';
+    }).join("") : '<div class="upd"><span class="w">Now</span><span class="dot"></span><span class="x">Camera is watching</span></div>';
+
+    if(latest && on){
+      $("nTitle").textContent = latest.kind==="prolonged_lying" ? "Lying on the floor for a long time" : "Fall confirmed \u2014 stayed down";
+      $("nBody").textContent = "No movement since the fall. If they don't respond to your voice, call 911.";
+    } else if(latest){
+      $("nTitle").textContent = "Last event: "+kindLabel(latest.kind)+" at "+fmtTime(latest.t);
+      $("nBody").textContent = "The person is no longer on the floor. Review the saved moment under Incidents.";
+    } else {
+      $("nTitle").textContent = "No fall detected";
+      $("nBody").textContent = "The camera is watching. You will be alerted here if a fall is detected.";
+    }
+
+    var list = ev.slice().reverse();
+    $("incEmpty").style.display = list.length ? "none" : "block";
+    $("incBody").innerHTML = list.map(function(e){
+      return '<tr><td><a href="'+e.url+'" target="_blank"><img src="'+e.url+'"></a></td><td>'+new Date(e.t*1000).toLocaleString()+'</td><td>'+kindLabel(e.kind)+'</td><td>'+(on&&e===latest?"Open":"Logged")+'</td></tr>';
+    }).join("");
+    $("shots").innerHTML = list.length ? list.map(function(e){
+      return '<div class="shot"><a href="'+e.url+'" target="_blank"><img src="'+e.url+'"></a><div><b>'+kindLabel(e.kind)+'</b><br>'+new Date(e.t*1000).toLocaleString()+'</div></div>';
+    }).join("") : '<span style="color:var(--muted)">No saved images yet.</span>';
+    applySettings();
+  }
+
+  function poll(){
+    fetch("/events.json",{cache:"no-store"}).then(function(r){return r.json();}).then(render).catch(function(){});
+  }
+
+  setInterval(function(){
+    $("clock").textContent = new Date().toLocaleTimeString([], {hour:"numeric", minute:"2-digit", second:"2-digit"});
+    if(alertSince!==null){
+      var left = Math.max(0, D.secs - (Date.now()-alertSince)/1000);
+      $("count").textContent = Math.floor(left/60)+":"+("0"+Math.floor(left%60)).slice(-2);
+    }
+  }, 500);
+
+  applySettings(); startVideo(); poll(); setInterval(poll, 1500);
+})();
+</script>
+</body>
+</html>
