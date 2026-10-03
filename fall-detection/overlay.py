@@ -5,6 +5,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
+from features import Features
 from pose import Landmarks
 
 # Body skeleton (face points other than the nose are skipped to reduce clutter).
@@ -43,12 +44,28 @@ def draw_text(frame: np.ndarray, text: str, org: tuple[int, int],
     cv2.putText(frame, text, org, FONT, scale, color, thickness, cv2.LINE_AA)
 
 
-def draw_overlay(frame: np.ndarray, lms: Landmarks | None, fps: float,
-                 min_visibility: float) -> None:
+def draw_features(frame: np.ndarray, feats: Features) -> None:
+    hip_h = "  --" if feats.hip_height is None else f"{feats.hip_height:4.2f}"
+    lines = [
+        f"angle  {feats.torso_angle:5.1f} deg",
+        f"hipvel {feats.hip_vel:+5.2f}  pk {feats.hip_vel_peak:+5.2f}",
+        f"aspect {feats.bbox_aspect:5.2f}",
+        f"hip_h  {hip_h}",
+        f"motion {feats.motion:5.2f}",
+        f"torso  {feats.torso_len:4.0f}/{feats.torso_ref:4.0f} px",
+    ]
+    for i, line in enumerate(lines):
+        draw_text(frame, line, (10, 25 + 24 * i))
+
+
+def draw_overlay(frame: np.ndarray, lms: Landmarks | None, feats: Features | None,
+                 fps: float, min_visibility: float) -> None:
     if lms is not None:
         draw_skeleton(frame, lms, min_visibility)
+    if feats is not None:
+        draw_features(frame, feats)
     else:
-        draw_text(frame, "NO POSE", (10, 60), WARN_COLOR, scale=0.9)
+        draw_text(frame, "NO POSE" if lms is None else "NO TORSO", (10, 30), WARN_COLOR, scale=0.9)
 
     h, w = frame.shape[:2]
     draw_text(frame, f"FPS {fps:5.1f}", (w - 130, 25))

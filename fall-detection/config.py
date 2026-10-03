@@ -22,6 +22,10 @@ class Config:
 
     # Features
     min_visibility: float = 0.5  # landmark visibility cutoff
+    ema_alpha: float = 0.4  # smoothing for torso_angle, hip_vel, motion (1.0 = no smoothing)
+    vel_window_s: float = 0.5  # window for peak hip velocity
+    ref_upright_angle: float = 20.0  # torso_ref only learns from frames more upright than this
+    torso_ref_frames: int = 30  # rolling median length for torso_ref
 
     # Display
     fps_smoothing: float = 0.9  # EMA factor for the FPS readout

@@ -3,18 +3,21 @@
     python main.py                    # webcam 0, overlay on
     python main.py --source 1         # other camera index
     python main.py --source clip.mp4  # replay a video file
+    python main.py --log-features f.csv  # dump per-frame features for tuning
     python main.py --no-display       # headless
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import sys
 import time
 
 import cv2
 
 from config import Config
+from features import FeatureExtractor, FeatureLogger
 from overlay import draw_overlay
 from pose import PoseEstimator
 
@@ -25,6 +28,8 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Camera-based fall detection")
     p.add_argument("--source", default=None,
                    help="camera index (e.g. 0, 1) or path to a video file")
+    p.add_argument("--log-features", metavar="CSV", default=None,
+                   help="write per-frame features to a CSV file")
     p.add_argument("--no-display", action="store_true", help="run headless")
     return p.parse_args()
 
@@ -54,7 +59,11 @@ def main() -> int:
     last_wall = time.perf_counter()
     start_wall = last_wall
 
-    with PoseEstimator(cfg) as estimator:
+    extractor = FeatureExtractor(cfg)
+
+    with contextlib.ExitStack() as stack:
+        estimator = stack.enter_context(PoseEstimator(cfg))
+        logger = stack.enter_context(FeatureLogger(args.log_features)) if args.log_features else None
         while True:
             ok, frame = cap.read()
             if not ok:
@@ -67,6 +76,9 @@ def main() -> int:
                 ts_ms = (time.perf_counter() - start_wall) * 1000.0
 
             lms = estimator.process(frame, ts_ms)
+            feats = extractor.update(lms, ts_ms / 1000.0)
+            if logger is not None:
+                logger.log(ts_ms / 1000.0, feats)
 
             now = time.perf_counter()
             inst = 1.0 / max(now - last_wall, 1e-6)
@@ -74,7 +86,7 @@ def main() -> int:
             fps = inst if fps == 0.0 else cfg.fps_smoothing * fps + (1 - cfg.fps_smoothing) * inst
 
             if not args.no_display:
-                draw_overlay(frame, lms, fps, cfg.min_visibility)
+                draw_overlay(frame, lms, feats, fps, cfg.min_visibility)
                 cv2.imshow(WINDOW, frame)
                 key = cv2.waitKey(1) & 0xFF
                 if key in (ord("q"), 27):  # q or Esc
