@@ -32,5 +32,12 @@ Invoke-WebRequest "$base/pose_landmarker_full/float16/latest/pose_landmarker_ful
 cd fall-detection
 python main.py                # webcam 0
 python main.py --source clip.mp4
+python main.py --params other.toml
 pytest
 ```
+
+## Tuning
+
+Edit `params.toml` and restart. Every number there overrides the default in
+`config.py`; delete a line to go back to the default. Unknown names or wrong
+types stop the program with an error, so a typo cannot be silently ignored.

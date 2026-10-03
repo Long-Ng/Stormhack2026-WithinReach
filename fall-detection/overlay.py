@@ -5,6 +5,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
+from detector import FallDetector, State
 from features import Features
 from pose import Landmarks
 
@@ -24,6 +25,13 @@ JOINT_COLOR = (0, 200, 255)
 TEXT_COLOR = (255, 255, 255)
 WARN_COLOR = (0, 0, 255)
 FONT = cv2.FONT_HERSHEY_SIMPLEX
+
+STATE_COLORS = {  # BGR
+    State.UPRIGHT: (0, 200, 0),
+    State.FALLING: (0, 230, 255),
+    State.ON_GROUND: (0, 140, 255),
+    State.FALL_CONFIRMED: (0, 0, 255),
+}
 
 
 def draw_skeleton(frame: np.ndarray, lms: Landmarks, min_visibility: float) -> None:
@@ -58,14 +66,27 @@ def draw_features(frame: np.ndarray, feats: Features) -> None:
         draw_text(frame, line, (10, 25 + 24 * i))
 
 
+def draw_state(frame: np.ndarray, det: FallDetector) -> None:
+    h = frame.shape[0]
+    draw_text(frame, det.state.value, (10, h - 20), STATE_COLORS[det.state], scale=1.2, thickness=3)
+    remaining = det.confirm_remaining
+    if remaining is not None:
+        draw_text(frame, f"still {remaining:3.1f}s", (10, h - 60), STATE_COLORS[det.state], scale=0.8)
+    elif det.lying_time > 0:
+        left = det.cfg.slow_fall_s - det.lying_time
+        draw_text(frame, f"lying {left:4.1f}s", (10, h - 60), STATE_COLORS[State.ON_GROUND], scale=0.8)
+
+
 def draw_overlay(frame: np.ndarray, lms: Landmarks | None, feats: Features | None,
-                 fps: float, min_visibility: float) -> None:
+                 det: FallDetector, fps: float, min_visibility: float) -> None:
     if lms is not None:
         draw_skeleton(frame, lms, min_visibility)
     if feats is not None:
         draw_features(frame, feats)
     else:
         draw_text(frame, "NO POSE" if lms is None else "NO TORSO", (10, 30), WARN_COLOR, scale=0.9)
+
+    draw_state(frame, det)
 
     h, w = frame.shape[:2]
     draw_text(frame, f"FPS {fps:5.1f}", (w - 130, 25))
