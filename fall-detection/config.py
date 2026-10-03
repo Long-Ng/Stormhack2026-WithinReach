@@ -10,6 +10,8 @@ from pathlib import Path
 
 MODELS_DIR = Path(__file__).parent / "models"
 DEFAULT_PARAMS = Path(__file__).parent / "params.toml"
+# Private overrides (ntfy topics, phone numbers), gitignored; read after the main file.
+LOCAL_PARAMS = Path(__file__).parent / "params.local.toml"
 PATH_KEYS = {"model_path", "events_dir"}  # relative values resolve against the params file
 
 
@@ -66,6 +68,17 @@ class Config:
     clip_max_width: int = 640  # clips are downscaled to this width; size ~ width^2 x fps
     clip_max_fps: float = 15.0  # clips keep at most this many frames per second
 
+    # Phone alerts (ntfy). Topics and numbers belong in params.local.toml, not in git.
+    ntfy_server: str = "https://ntfy.sh"
+    ntfy_person_topic: str = ""  # the person's phone subscribes to this; empty = alerts off
+    ntfy_monitor_topic: str = ""  # the monitor's phone subscribes to this
+    ntfy_attach_snapshot: bool = True  # monitor notification includes the snapshot image
+    reply_timeout_s: float = 30.0  # no reply from the person this long -> alert the monitor
+    call_number: str = ""  # "Call" button on the person's phone; NOT 911 while testing
+    person_number: str = ""  # "Call person" button on the monitor's phone
+    room_name: str = "Living room"
+    public_url: str = ""  # address phones use to reach this PC; empty = http://<LAN IP>:<port>
+
     # Display
     fps_smoothing: float = 0.9  # EMA factor for the FPS readout
 
@@ -81,9 +94,17 @@ class Config:
             return cfg
         path = Path(path)
         if not path.exists():
-            if path == DEFAULT_PARAMS:
-                return cfg
-            raise FileNotFoundError(f"params file not found: {path}")
+            if path != DEFAULT_PARAMS:
+                raise FileNotFoundError(f"params file not found: {path}")
+        else:
+            cfg._apply(path)
+        local = path.parent / LOCAL_PARAMS.name
+        if local.exists():
+            cfg._apply(local)
+        return cfg
+
+    def _apply(self, path: Path) -> None:
+        cls = type(self)
         with open(path, "rb") as f:
             data = tomllib.load(f)
 
@@ -105,5 +126,4 @@ class Config:
                 raise ValueError(f"{path}: '{key}' should be {want.__name__}, got {value!r}")
             if key in PATH_KEYS and not Path(value).is_absolute():
                 value = str(path.parent / value)  # relative to the params file, not the cwd
-            setattr(cfg, key, value)
-        return cfg
+            setattr(self, key, value)

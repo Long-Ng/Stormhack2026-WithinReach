@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Did you fall?</title>
+<style>
+  :root { --bg:#fff7f7; --fg:#1d1d1f; --muted:#6b6b70; --ok:#16a34a; --help:#e5484d; --call:#1d4ed8; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1a1214; --fg:#f4f4f5; --muted:#a1a1aa; } }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:flex; flex-direction:column; gap:16px; padding:24px 16px;
+         font-family:system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--fg); }
+  h1 { font-size:2.2rem; margin:8px 0 0; text-align:center; }
+  #info { text-align:center; color:var(--muted); font-size:1.1rem; min-height:1.5em; }
+  #count { text-align:center; font-size:3.5rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  button, a.btn { display:block; width:100%; border:0; border-radius:20px; padding:28px 16px;
+         font-size:1.8rem; font-weight:700; color:#fff; text-align:center; text-decoration:none; cursor:pointer; }
+  #ok { background:var(--ok); } #help { background:var(--help); } #call { background:var(--call); }
+  button:disabled { opacity:.45; }
+  #done { display:none; text-align:center; font-size:1.6rem; font-weight:600; padding:24px 0; }
+</style>
+</head>
+<body>
+  <h1>Did you fall?</h1>
+  <div id="info">Loading…</div>
+  <div id="count"></div>
+  <button id="ok">I'm OK</button>
+  <button id="help">I need help</button>
+  <a id="call" class="btn" href="tel:{{CALL_NUMBER}}">Call {{CALL_NUMBER}}</a>
+  <div id="done"></div>
+<script>
+const id = new URLSearchParams(location.search).get("id");
+const $ = s => document.getElementById(s);
+if (!"{{CALL_NUMBER}}") $("call").style.display = "none";
+let deadline = null, skew = 0;
+
+async function answer(a) {
+  $("ok").disabled = $("help").disabled = true;
+  try {
+    const r = await fetch(`/respond?id=${encodeURIComponent(id)}&answer=${a}`, { method: "POST" });
+    show(await r.text());
+  } catch (e) {
+    $("ok").disabled = $("help").disabled = false;
+    $("info").textContent = "Could not reach the system. Use the Call button.";
+  }
+}
+function show(text) {
+  $("done").textContent = text; $("done").style.display = "block";
+  $("ok").style.display = $("help").style.display = "none"; $("count").textContent = "";
+}
+$("ok").onclick = () => answer("ok");
+$("help").onclick = () => answer("help");
+
+async function poll() {
+  try {
+    const j = await (await fetch("/incidents.json", { cache: "no-store" })).json();
+    skew = Date.now() / 1000 - j.now;
+    const inc = j.incidents.find(i => i.id === id) || j.incidents[j.incidents.length - 1];
+    if (!inc) { $("info").textContent = "No fall alert right now."; return; }
+    const at = new Date(inc.t * 1000).toLocaleTimeString();
+    if (inc.status === "waiting") {
+      deadline = inc.t + j.reply_timeout_s;
+      $("info").textContent = `Fall detected at ${at}. Your contact will be alerted if you don't answer.`;
+    } else if (inc.status === "no_reply") {
+      // Monitor already alerted; the person can still say they are OK or ask for help.
+      deadline = null; $("count").textContent = "";
+      $("info").textContent = `Fall detected at ${at}. Your contact has been alerted.`;
+    } else {
+      deadline = null;
+      show({ ok: "Glad you're OK", help: "Help is on the way" }[inc.status] || inc.status);
+      $("info").textContent = `Fall detected at ${at}.`;
+    }
+  } catch (e) { $("info").textContent = "Connecting…"; }
+}
+setInterval(() => {
+  if (deadline === null) return;
+  const left = Math.max(0, Math.ceil(deadline - (Date.now() / 1000 - skew)));
+  $("count").textContent = left + " s";
+}, 250);
+poll(); setInterval(poll, 2000);
+</script>
+</body>
+</html>

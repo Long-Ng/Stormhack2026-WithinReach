@@ -45,3 +45,17 @@ def test_bool_params(tmp_path):
     assert Config.load(write(tmp_path, "prefer_droidcam = false\n")).prefer_droidcam is False
     with pytest.raises(ValueError, match="prefer_droidcam"):
         Config.load(write(tmp_path, "prefer_droidcam = 0\n"))
+
+
+def test_local_params_override_main_file(tmp_path):
+    main = write(tmp_path, "[alerts]\nreply_timeout_s = 30.0\n")
+    (tmp_path / "params.local.toml").write_text('ntfy_person_topic = "secret"\nreply_timeout_s = 10\n')
+    cfg = Config.load(main)
+    assert cfg.ntfy_person_topic == "secret" and cfg.reply_timeout_s == 10.0
+
+
+def test_local_params_unknown_key_is_an_error(tmp_path):
+    main = write(tmp_path, "")
+    (tmp_path / "params.local.toml").write_text('ntfy_topic = "x"\n')
+    with pytest.raises(ValueError, match="ntfy_topic"):
+        Config.load(main)

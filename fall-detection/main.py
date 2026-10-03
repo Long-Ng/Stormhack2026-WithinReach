@@ -23,6 +23,7 @@ import time
 import cv2
 
 from camera import open_source
+from alerts import open_alerts
 from clips import ClipRecorder
 from config import Config
 from cover import CoverReset
@@ -107,17 +108,28 @@ def main() -> int:
     cover = CoverReset(cfg) if cfg.cover_reset else None
     # Add new alert channels here; nothing else needs to change.
     sinks = [ConsoleSink(), FileSink(cfg.events_dir)]
+    # Phone alerts: person first, then the monitor. Replies arrive on the dashboard server.
+    alerts = open_alerts(cfg, args.port) if streamer is not None else None
+    if alerts is not None:
+        manager, publisher = alerts
+        sinks.append(manager)
+        for path, handler in manager.routes().items():
+            streamer.add_route(path, handler)
     recorder = ClipRecorder(cfg.events_dir, cfg.clip_pre_s, cfg.clip_tail_s, cfg.clip_max_after_s,
                             cfg.clip_max_width, cfg.clip_max_fps)
 
     with contextlib.ExitStack() as stack:
         stack.callback(recorder.close)  # finish the clip in progress on exit
+        if alerts is not None:
+            stack.callback(publisher.close)  # send queued notifications before exiting
         estimator = stack.enter_context(PoseEstimator(cfg))
         logger = stack.enter_context(FeatureLogger(args.log_features)) if args.log_features else None
         while True:
             ok, frame = cap.read()
             if not ok:
                 break
+            if alerts is not None:
+                manager.tick()  # escalate to the monitor when the person has not replied
 
             # Clean frame for the dashboard: sent before any overlay is drawn on it.
             if streamer is not None:

@@ -16,6 +16,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs
 
 import cv2
 
@@ -39,6 +40,7 @@ class Streamer:
         self._last = 0.0
         self._closed = False
         self._alert: dict | None = None  # latest alert(), for the dashboard
+        self._routes: dict = {}  # path -> handler(query) -> (status, content_type, body)
         owner = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -59,9 +61,35 @@ class Streamer:
             def do_OPTIONS(self):
                 self._send(204, "text/plain", b"")
 
+            def _route(self) -> bool:
+                """Serve a route added with add_route(). True if one handled the request."""
+                path, _, qs = self.path.partition("?")
+                handler = owner._routes.get(path)
+                if handler is None:
+                    return False
+                query = {k: v[-1] for k, v in parse_qs(qs).items()}
+                try:
+                    code, ctype, body = handler(query)
+                except Exception as e:
+                    code, ctype, body = 500, "text/plain", repr(e).encode()
+                self._send(code, ctype, body)
+                return True
+
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                if length:
+                    self.rfile.read(length)  # body unused; keeps the connection clean
+                try:
+                    if not self._route():
+                        self._send(404, "text/plain", b"not found")
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    pass
+
             def do_GET(self):
                 path = self.path.split("?")[0]
                 try:
+                    if self._route():
+                        return
                     if path in ("/", "/index.html", "/dashboard.html"):
                         for c in DASHBOARD_CANDIDATES:
                             if c.is_file():
@@ -118,6 +146,10 @@ class Streamer:
         with self._cond:
             self._jpg = buf.tobytes()
             self._cond.notify_all()
+
+    def add_route(self, path: str, handler) -> None:
+        """Serve `path` (GET and POST) with handler(query) -> (status, content_type, body)."""
+        self._routes[path] = handler
 
     def alert(self, message: str) -> None:
         """Flag an active alert. Called on detection and every frame while confirmed."""

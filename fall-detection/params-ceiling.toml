@@ -1,3 +1,10 @@
+# Ceiling / corner security camera profile (looking down at the room).
+# Tuned on CAUCAFall (10 subjects x 10 activities, last frame held 5 s):
+#   defaults: 34/50 falls, 1/50 false alarms -> this file: 43/50 falls, 1/50 false alarms
+#   chosen on subjects 1-5, checked on unseen subjects 6-10 (18 -> 21 of 25, 0 false alarms)
+# Use: python main.py --source rtsp://... --params params-ceiling.toml
+# Not validated for a table-height camera; keep params.toml for that until tested.
+
 # Tuning parameters. Each value overrides the default in config.py.
 # Delete a line to fall back to the default. Restart main.py after editing.
 # Section headers are only for grouping; names must match config.py exactly.
@@ -27,12 +34,12 @@ torso_ref_frames = 30     # rolling median length for torso_ref
 [detector]
 # Fast descent: UPRIGHT -> FALLING
 fall_vel = 1.5            # torso lengths/s downward. Real falls ~2.5-3.5, sitting ~0.8
-fall_window_s = 1.5       # time allowed from fast descent to lying
+fall_window_s = 2.0       # ceiling: falls take longer to look "down" from above (default 1.5)
 
 # "Down" = (torso_angle > lying_angle OR bbox_aspect > lying_aspect) AND hip_height < low_hip
 lying_angle = 60.0        # torso angle: 0 upright, 90 horizontal, 180 upside down
-lying_aspect = 1.2        # bbox width / height
-low_hip = 0.6             # hip height above ankles, in torso lengths
+lying_aspect = 0.9        # ceiling: lying bodies look less wide from above (default 1.2)
+low_hip = 1.0             # ceiling: perspective inflates hip height on the floor (default 0.6)
 
 # Stillness on the ground: ON_GROUND -> FALL_CONFIRMED
 still_motion = 0.3        # torso lengths/s; raise if small jitter keeps resetting the timer
@@ -62,19 +69,6 @@ clip_tail_s = 10.0
 clip_max_after_s = 300.0
 clip_max_width = 640      # pixels; file size grows with width^2 x fps (640 @ 15 fps ~ 25 MB/min)
 clip_max_fps = 15.0
-
-[alerts]
-# Phone alerts through ntfy (https://ntfy.sh). Put the private values in
-# params.local.toml next to this file (gitignored), e.g.:
-#   ntfy_person_topic  = "fall-person-<random>"
-#   ntfy_monitor_topic = "fall-monitor-<random>"
-#   call_number   = "+1555..."   # a teammate while testing, NOT 911
-#   person_number = "+1555..."
-ntfy_server = "https://ntfy.sh"
-ntfy_attach_snapshot = true   # monitor notification shows the snapshot
-reply_timeout_s = 30.0        # person has this long to answer before the monitor is alerted
-room_name = "Living room"
-public_url = ""               # empty = http://<this PC's Wi-Fi IP>:<port>
 
 [display]
 fps_smoothing = 0.9
