@@ -1,9 +1,15 @@
-"""All tunable settings live here. Nothing elsewhere should hardcode a threshold."""
+"""All tunable settings live here. Nothing elsewhere should hardcode a threshold.
 
-from dataclasses import dataclass
+The values below are defaults. `params.toml` overrides any of them for tuning
+without touching code (see `Config.load`).
+"""
+
+import tomllib
+from dataclasses import dataclass, fields
 from pathlib import Path
 
 MODELS_DIR = Path(__file__).parent / "models"
+DEFAULT_PARAMS = Path(__file__).parent / "params.toml"
 
 
 @dataclass
@@ -27,5 +33,58 @@ class Config:
     ref_upright_angle: float = 20.0  # torso_ref only learns from frames more upright than this
     torso_ref_frames: int = 30  # rolling median length for torso_ref
 
+    # Detector (state machine)
+    fall_vel: float = 1.5  # torso lengths/s downward; real falls peak ~2.5-3.5, sitting ~0.8
+    fall_window_s: float = 1.5  # time allowed from fast descent to horizontal
+    lying_angle: float = 60.0  # degrees from vertical
+    lying_aspect: float = 1.2  # bbox width / height
+    low_hip: float = 0.6  # normalized hip height
+    still_motion: float = 0.3  # torso lengths/s
+    confirm_s: float = 3.0  # stillness on the ground before confirming
+    still_grace_s: float = 0.5  # unsteady frames shorter than this pause the stillness timer instead of resetting it
+    upright_angle: float = 30.0  # degrees
+    recover_s: float = 1.0  # upright time to reset to UPRIGHT
+    lost_grace_s: float = 1.0  # pose-loss tolerance while down
+    slow_fall_s: float = 15.0  # down this long without a fast descent -> prolonged_lying
+
     # Display
     fps_smoothing: float = 0.9  # EMA factor for the FPS readout
+
+    @classmethod
+    def load(cls, path: str | Path | None = DEFAULT_PARAMS) -> "Config":
+        """Defaults overridden by a TOML file. Section headers are only for grouping.
+
+        A missing default file is fine; a missing explicit file, an unknown key or
+        a wrong type is an error, so typos do not silently fall back to defaults.
+        """
+        cfg = cls()
+        if path is None:
+            return cfg
+        path = Path(path)
+        if not path.exists():
+            if path == DEFAULT_PARAMS:
+                return cfg
+            raise FileNotFoundError(f"params file not found: {path}")
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+
+        flat: dict = {}
+        for key, value in data.items():
+            if isinstance(value, dict):
+                flat.update(value)
+            else:
+                flat[key] = value
+
+        types = {f.name: f.type for f in fields(cls)}
+        for key, value in flat.items():
+            if key not in types:
+                raise ValueError(f"{path}: unknown parameter '{key}'")
+            want = types[key]
+            if want is float and isinstance(value, int) and not isinstance(value, bool):
+                value = float(value)
+            if not isinstance(value, want) or isinstance(value, bool):
+                raise ValueError(f"{path}: '{key}' should be {want.__name__}, got {value!r}")
+            if key == "model_path" and not Path(value).is_absolute():
+                value = str(path.parent / value)  # relative to the params file, not the cwd
+            setattr(cfg, key, value)
+        return cfg

@@ -1,0 +1,45 @@
+# Tuning parameters. Each value overrides the default in config.py.
+# Delete a line to fall back to the default. Restart main.py after editing.
+# Section headers are only for grouping; names must match config.py exactly.
+
+[pose]
+# model_path = "models/pose_landmarker_lite.task"   # lighter model if FPS is low
+min_pose_detection_confidence = 0.5
+min_pose_presence_confidence = 0.5
+min_tracking_confidence = 0.5
+
+[capture]
+camera_index = 0
+frame_width = 640
+frame_height = 480
+
+[features]
+min_visibility = 0.5      # landmark visibility cutoff (0-1)
+ema_alpha = 0.4           # smoothing for angle / hip_vel / motion; lower = smoother, 1.0 = off
+vel_window_s = 0.5        # window for peak hip velocity
+ref_upright_angle = 20.0  # torso_ref only learns from frames more upright than this
+torso_ref_frames = 30     # rolling median length for torso_ref
+
+[detector]
+# Fast descent: UPRIGHT -> FALLING
+fall_vel = 1.5            # torso lengths/s downward. Real falls ~2.5-3.5, sitting ~0.8
+fall_window_s = 1.5       # time allowed from fast descent to lying
+
+# "Down" = (torso_angle > lying_angle OR bbox_aspect > lying_aspect) AND hip_height < low_hip
+lying_angle = 60.0        # degrees from vertical
+lying_aspect = 1.2        # bbox width / height
+low_hip = 0.6             # hip height above ankles, in torso lengths
+
+# Stillness on the ground: ON_GROUND -> FALL_CONFIRMED
+still_motion = 0.3        # torso lengths/s; raise if small jitter keeps resetting the timer
+confirm_s = 3.0           # seconds of stillness before the fall is confirmed
+still_grace_s = 0.5       # movement shorter than this pauses the timer instead of resetting it
+
+# Recovery and pose loss
+upright_angle = 30.0      # torso angle counted as upright
+recover_s = 1.0           # seconds upright to go back to UPRIGHT
+lost_grace_s = 1.0        # pose lost while down: hold this long, then count as still
+slow_fall_s = 15.0        # lying this long without a fast descent -> prolonged_lying
+
+[display]
+fps_smoothing = 0.9
