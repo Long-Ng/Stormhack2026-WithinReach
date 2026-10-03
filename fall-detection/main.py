@@ -1,12 +1,16 @@
 """Fall detection entry point.
 
-    python main.py                    # DroidCam phone if streaming, else webcam 0
-    python main.py --source 1         # other camera index
-    python main.py --source http://192.168.1.5:4747/video  # DroidCam over Wi-Fi
-    python main.py --source clip.mp4  # replay a video file
-    python main.py --log-features f.csv  # dump per-frame features for tuning
-    python main.py --no-display       # headless
-    python main.py --params other.toml   # use a different parameter file
+python main.py                                        # DroidCam phone if streaming, else webcam 0
+python main.py --source 1                             # other camera index
+python main.py --source http://192.168.1.5:4747/video # DroidCam over Wi-Fi
+python main.py --source clip.mp4                      # replay a video file
+python main.py --log-features f.csv                   # dump per-frame features for tuning
+python main.py --no-display                           # headless
+python main.py --params other.toml                    # use a different parameter file
+python main.py --port 5050                            # dashboard server port (default 5000)
+python main.py --no-dashboard                         # do not start the dashboard server
+
+While running, open http://localhost:5000/ for the live dashboard.
 """
 
 from __future__ import annotations
@@ -29,6 +33,10 @@ from pose import PoseEstimator
 
 WINDOW = "Fall Detection"
 
+# True  = saved event snapshots include the skeleton (original behaviour)
+# False = clean snapshot (what the dashboard shows is just the person)
+SNAPSHOT_SKELETON = False
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Camera-based fall detection")
@@ -39,14 +47,16 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--params", metavar="TOML", default=None,
                    help="parameter file (default: params.toml next to main.py)")
     p.add_argument("--no-display", action="store_true", help="run headless")
+    p.add_argument("--port", type=int, default=5000, help="dashboard server port")
+    p.add_argument("--no-dashboard", action="store_true", help="do not start the dashboard server")
     return p.parse_args()
 
 
-def handle_detection(detection, frame, lms, cfg: Config, sinks) -> None:
-    """Snapshot the frame (with skeleton, before the debug text) and send the event."""
+def handle_detection(detection, frame, lms, cfg: Config, sinks, streamer=None) -> None:
+    """Snapshot the frame (before the debug text), send the event, flag the live stream."""
     now = time.time()
     snap = frame.copy()
-    if lms is not None:
+    if SNAPSHOT_SKELETON and lms is not None:
         draw_skeleton(snap, lms, cfg.min_visibility)
     try:
         snapshot_path = save_snapshot(snap, cfg.events_dir, now)
@@ -54,6 +64,18 @@ def handle_detection(detection, frame, lms, cfg: Config, sinks) -> None:
         print(f"snapshot failed: {e!r}", file=sys.stderr)
         snapshot_path = None
     dispatch(FallEvent.from_detection(detection, now, snapshot_path), sinks)
+    if streamer is not None:
+        streamer.alert(f"{detection.kind.replace('_', ' ').upper()} DETECTED")
+
+
+def start_dashboard(port: int, cfg: Config):
+    """Start the dashboard/video server. Never lets a dashboard problem stop the detector."""
+    try:
+        from stream import Streamer
+        return Streamer(port=port, events_dir=cfg.events_dir)
+    except Exception as e:
+        print(f"[dashboard] disabled: {e!r}", file=sys.stderr)
+        return None
 
 
 def main() -> int:
@@ -66,6 +88,8 @@ def main() -> int:
         print(f"Could not open {source.label}", file=sys.stderr)
         return 1
     print(f"Using {source.label}")
+
+    streamer = None if args.no_dashboard else start_dashboard(args.port, cfg)
 
     fps = 0.0
     last_wall = time.perf_counter()
@@ -85,6 +109,10 @@ def main() -> int:
             if not ok:
                 break
 
+            # Clean frame for the dashboard: sent before any overlay is drawn on it.
+            if streamer is not None:
+                streamer.update(frame)
+
             # Video files use their own timestamps so replays are reproducible.
             if is_file:
                 ts_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
@@ -101,7 +129,9 @@ def main() -> int:
             feats = extractor.update(lms, ts_ms / 1000.0)
             detection = detector.update(feats, ts_ms / 1000.0)
             if detection is not None:
-                handle_detection(detection, frame, lms, cfg, sinks)
+                handle_detection(detection, frame, lms, cfg, sinks, streamer)
+            if streamer is not None and detector.state.name == "FALL_CONFIRMED":
+                streamer.alert("FALL CONFIRMED")
             if logger is not None:
                 logger.log(ts_ms / 1000.0, feats)
 
@@ -119,6 +149,8 @@ def main() -> int:
                 if cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) < 1:
                     break  # window closed with the X button
 
+    if streamer is not None:
+        streamer.close()
     cap.release()
     cv2.destroyAllWindows()
     return 0
