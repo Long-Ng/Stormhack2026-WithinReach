@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fall & Stroke Warning System</title>
+<style>
+:root{--bg:#eef3fb;--card:#fff;--tx:#1e2a44;--mut:#6b7a99;--pri:#2f6bff;--ok:#16a34a;--warn:#f59e0b;--bad:#e5484d;--line:#e6ecf7}
+*{box-sizing:border-box}body{margin:0;font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 24px;background:#fff;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.brand{display:flex;gap:12px;align-items:center}.logo{width:46px;height:46px;border-radius:12px;background:#0f2a5c;display:grid;place-items:center;font-size:24px}
+.brand h1{margin:0;font-size:21px;color:#1b3a7a}.brand small{color:var(--mut)}
+.pills{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.pill{background:#fff;border:1px solid var(--line);border-radius:99px;padding:8px 16px;font-size:13px;display:flex;gap:8px;align-items:center;box-shadow:0 2px 6px #1b3a7a10}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--bad);display:inline-block}.dot.on{background:var(--ok)}
+#clockP{font-family:ui-monospace,Consolas,monospace;background:#e9f0ff;color:#1b3a7a;font-size:15px}
+button{font:inherit;border:0;border-radius:10px;padding:8px 14px;cursor:pointer;background:var(--pri);color:#fff}
+button.ghost{background:#eaf0ff;color:var(--pri);border:1px solid #c9d8ff}button.g{background:#eef1f7;color:var(--tx)}
+.layout{display:grid;grid-template-columns:200px 1fr}
+nav{background:#f6f9ff;border-right:1px solid var(--line);padding:16px 12px;display:flex;flex-direction:column;gap:6px;min-height:calc(100vh - 78px)}
+nav a{padding:12px 14px;border-radius:10px;color:var(--tx);text-decoration:none;font-size:15px}nav a:hover{background:#e2ebff;color:var(--pri)}
+.sys{margin-top:auto;background:#fff;border-radius:10px;padding:10px 12px;font-size:13px}.sys small{color:var(--mut)}
+main{padding:20px;display:grid;grid-template-columns:1.5fr 1fr;gap:18px;align-content:start}
+.card{background:var(--card);border-radius:16px;padding:16px;box-shadow:0 4px 16px #1b3a7a0d}
+.card h2{margin:0;font-size:16px;display:flex;align-items:center;gap:10px}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.tag{font-size:11px;padding:3px 10px;border-radius:99px;background:#e4f6ea;color:var(--ok)}.tag.bad{background:#fdeaea;color:var(--bad)}
+.live{font-size:13px;padding:5px 12px;border-radius:99px;background:#eef1f7;color:var(--mut)}.live.on{background:#e4f6ea;color:var(--ok)}
+.stageWrap{background:#000;border-radius:12px;overflow:hidden}
+.stage{position:relative;margin:0 auto;width:100%;aspect-ratio:4/3;max-height:64vh;background:#000}
+.stage img.v{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none}
+.ts,.camname{position:absolute;top:10px;font-family:ui-monospace,Consolas,monospace;font-size:13px;color:#fff;background:#0008;padding:4px 10px;border-radius:6px;z-index:2}
+.ts{left:10px}.camname{right:10px;font-family:inherit}
+#msg{position:absolute;inset:0;display:grid;place-items:center;color:#9fb0d0;text-align:center;padding:20px}
+#frame{position:absolute;inset:0;border:5px solid var(--bad);display:none;pointer-events:none;z-index:1;animation:pulse 1s infinite}
+#frame span{position:absolute;left:0;top:44px;background:var(--bad);color:#fff;font-weight:700;font-size:15px;padding:6px 14px}
+.stage.alert #frame{display:block}
+@keyframes pulse{50%{box-shadow:inset 0 0 28px var(--bad)}}
+.ctrl{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+.alertcard{display:flex;gap:16px;border:1px solid var(--line);border-radius:12px;padding:14px}
+.thumb{width:190px;height:150px;border-radius:10px;background:#dfe7f7 center/cover no-repeat;flex:none;display:grid;place-items:center;color:var(--mut);font-size:12px;text-align:center;cursor:zoom-in}
+.ainfo{flex:1;display:flex;flex-direction:column;gap:7px;font-size:14px}.ainfo b{font-size:15px}
+.sent{display:inline-block;background:#eef1f7;color:var(--mut);padding:5px 12px;border-radius:8px;font-size:13px}
+.btns{display:grid;grid-template-columns:1.2fr 1fr;gap:12px;margin-top:12px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.stats2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.stat{border:1px solid var(--line);border-radius:12px;padding:12px;font-size:13px;color:var(--mut)}
+.stat b{display:block;font-size:26px;margin-top:6px;color:var(--ok)}.stat.red b{color:var(--bad)}.stat.blue b{color:var(--pri)}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:8px;text-align:left;vertical-align:middle}th{color:var(--mut);font-weight:500;background:#f5f8fe}
+tr+tr td{border-top:1px solid var(--line)}.st{padding:3px 10px;border-radius:8px;font-size:12px}.st.p{background:#fdeaea;color:var(--bad)}.st.d{background:#e4f6ea;color:var(--ok)}
+td img{width:72px;height:54px;object-fit:cover;border-radius:6px;cursor:zoom-in;display:block}
+.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.gal div{position:relative}.gal img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px;cursor:zoom-in;display:block}
+.gal small{position:absolute;left:6px;bottom:6px;background:#000a;color:#fff;border-radius:6px;padding:2px 6px;font-size:11px}
+#settings{display:none;position:fixed;top:78px;right:20px;z-index:20;width:340px;max-width:92vw;background:#fff;border-radius:14px;padding:16px;box-shadow:0 10px 40px #0003;flex-direction:column;gap:8px}
+input{font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px}
+#banner{display:none;position:fixed;top:0;left:0;right:0;background:var(--bad);color:#fff;padding:14px;text-align:center;font-weight:700;font-size:18px;z-index:30;cursor:pointer}
+#lb{display:none;position:fixed;inset:0;background:#000d;z-index:40;place-items:center;cursor:zoom-out}#lb img{max-width:92vw;max-height:92vh;border-radius:10px}
+.mut{color:var(--mut);font-size:13px}
+@media(max-width:1000px){.layout{grid-template-columns:1fr}nav{flex-direction:row;overflow:auto;min-height:0}.sys{display:none}main{grid-template-columns:1fr}.alertcard{flex-direction:column}.thumb{width:100%}}
+</style></head><body>
+<div id="banner"></div><div id="lb"><img id="lbImg" alt=""></div>
+<header>
+ <div class="brand"><div class="logo">🛡️</div><div><h1>FALL &amp; STROKE WARNING SYSTEM</h1><small>Real-time Video Intelligence &amp; Safety Surveillance</small></div></div>
+ <div class="pills">
+  <div class="pill"><span class="dot" id="dSrv"></span><span id="tSrv">Máy chủ: Mất kết nối</span></div>
+  <div class="pill"><span class="dot" id="dCam"></span><span id="tCam">Camera: Tắt</span></div>
+  <div class="pill" id="clockP">--:--:--</div>
+  <button class="ghost" id="setBtn">⚙ Cài đặt</button>
+ </div>
+</header>
+<div id="settings">
+ <b>Cài đặt</b>
+ <label class="mut">Địa chỉ máy chủ main.py</label><input id="base" placeholder="http://localhost:5000">
+ <label class="mut">Số điện thoại khẩn cấp</label><input id="tel" value="911">
+ <label class="mut">Tên phòng / camera</label><input id="roomIn" value="Phòng khách">
+ <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap"><button id="save">Lưu</button><button class="g" id="sim">Mô phỏng cảnh báo</button></div>
+</div>
+<div class="layout">
+<nav>
+ <a href="#live">🎥 Video trực tiếp</a><a href="#alertbox">🚨 Cảnh báo</a><a href="#history">🕘 Lịch sử cảnh báo</a><a href="#moments">📸 Khoảnh khắc đã lưu</a><a href="#stats">📊 Thống kê</a>
+ <div class="sys"><span class="dot on"></span> Hệ thống hoạt động<br><small>Phiên bản 0.2.0</small></div>
+</nav>
+<main>
+ <section class="card" id="live">
+  <div class="bar"><h2><span class="dot" id="camDot"></span> CAMERA 01 - <span id="camTitle">Phòng khách</span></h2><span class="live" id="liveTag">Ngoại tuyến</span></div>
+  <div class="stageWrap"><div class="stage" id="stage">
+    <img class="v" id="cam" alt="camera">
+    <div id="frame"><span>FALL DETECTED</span></div>
+    <div class="ts" id="ts">--</div><div class="camname">Camera 01</div>
+    <div id="msg">Đang chờ video từ main.py...</div>
+  </div></div>
+  <div class="ctrl"><button class="g" id="camGo">↻ Kết nối lại</button><button class="g" id="snap">📷 Chụp</button><button class="g" id="fs">⛶</button></div>
+ </section>
+
+ <section class="card" id="alertbox">
+  <div class="bar"><h2><span style="color:var(--bad)">⚡</span> CẢNH BÁO TÉ NGÃ <span class="tag" id="aTag">Bình thường</span></h2></div>
+  <div class="alertcard">
+   <div class="thumb" id="aThumb">Chưa có cảnh báo</div>
+   <div class="ainfo">
+    <b id="aCam">Camera 01 - Phòng khách</b>
+    <div>🕒 <span id="aTime">--</span></div>
+    <div>⏱ Đã trôi qua: <span id="aAgo">--</span></div>
+    <div>🖼 Ảnh lưu: <span id="aFile" style="word-break:break-all">--</span></div>
+    <div><span class="sent" id="aSent">🔔 Chưa có thông báo</span></div>
+   </div>
+  </div>
+  <div class="btns"><button id="aDetail">Xem ảnh lớn</button><button class="ghost" id="aHandle">Xử lý</button></div>
+  <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="g" id="call">📞 Gọi khẩn cấp</button><button class="g" id="copy">📋 Sao chép tóm tắt</button></div>
+ </section>
+
+ <section class="card" id="history">
+  <div class="bar"><h2>🕘 LỊCH SỬ CẢNH BÁO</h2><button class="g" id="csv">Xuất CSV</button></div>
+  <table><thead><tr><th>ID</th><th>Ảnh</th><th>Thời gian</th><th>Loại</th><th>Trạng thái</th></tr></thead><tbody id="rows"></tbody></table>
+  <div id="scan" class="mut" style="margin-top:10px"></div>
+ </section>
+
+ <section class="card" id="stats">
+  <div class="bar"><h2>📊 THỐNG KÊ HỆ THỐNG</h2><span class="mut">Cập nhật: Real-time</span></div>
+  <div class="stats">
+   <div class="stat red">Tổng số cảnh báo<b id="sTotal">0</b></div>
+   <div class="stat">Đang giám sát<b id="sMon">0</b></div>
+   <div class="stat blue">Thời gian hoạt động<b id="sUp">0.0</b></div>
+  </div>
+  <div class="stats2"><div class="stat blue">Cảnh báo chưa xử lý<b id="sOpen">0</b></div><div class="stat red">Mức độ nguy cơ<b id="sRisk" style="color:var(--ok)">Thấp</b></div></div>
+ </section>
+
+ <section class="card" id="moments" style="grid-column:1/-1">
+  <div class="bar"><h2>📸 KHOẢNH KHẮC ĐÃ LƯU</h2><span class="mut">Ảnh do events.py lưu khi phát hiện té ngã (thư mục events/)</span></div>
+  <div class="gal" id="gal"><span class="mut">Chưa có ảnh nào.</span></div>
+ </section>
+</main>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cfg=JSON.parse(localStorage.getItem('fsw3')||'{}');
+const DEF=location.protocol.startsWith('http')?'':'http://localhost:5000';
+let BASE=(cfg.base!==undefined?cfg.base:DEF);
+$('base').value=BASE||'http://localhost:5000';if(cfg.tel)$('tel').value=cfg.tel;if(cfg.room)$('roomIn').value=cfg.room;
+let ROOM=$('roomIn').value;
+const startT=Date.now();let events=[],seen=new Set(),handled=new Set(JSON.parse(localStorage.getItem('fsw3h')||'[]')),first=true,srvOK=false,skew=0,currentName=null;
+const ACTIVE_S=30;const nowS=()=>Date.now()/1000-skew;
+const pad=n=>String(n).padStart(2,'0');
+const fmtT=d=>`${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+const fmtDT=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${fmtT(d)}`;
+const fmtD=d=>`${fmtT(d)} - ${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
+const dot=(id,on)=>$(id).className='dot'+(on?' on':'');
+const ago=s=>s<60?Math.round(s)+' giây':s<3600?Math.floor(s/60)+' phút '+Math.round(s%60)+' giây':Math.floor(s/3600)+' giờ '+Math.floor(s%3600/60)+' phút';
+function beep(){try{const c=new AudioContext(),o=c.createOscillator();o.connect(c.destination);o.frequency.value=880;o.start();setTimeout(()=>o.stop(),600)}catch(e){}}
+$('setBtn').onclick=()=>{const s=$('settings');s.style.display=s.style.display==='flex'?'none':'flex'};
+$('save').onclick=()=>{BASE=$('base').value.trim().replace(/\/$/,'');ROOM=$('roomIn').value;
+ localStorage.setItem('fsw3',JSON.stringify({base:BASE,tel:$('tel').value,room:ROOM}));$('camTitle').textContent=ROOM;connectCam();poll()};
+$('camTitle').textContent=ROOM;
+
+function camState(on){dot('dCam',on);dot('camDot',on);$('tCam').textContent='Camera: '+(on?'Trực tuyến':'Tắt');$('liveTag').textContent=on?'● Trực tuyến':'Ngoại tuyến';$('liveTag').className='live'+(on?' on':'')}
+function connectCam(){const im=$('cam');
+ im.onload=()=>{im.style.display='block';$('msg').style.display='none';camState(true)};
+ im.onerror=()=>{im.style.display='none';$('msg').style.display='grid';$('msg').textContent='Chưa nhận được video. Hãy chạy main.py rồi mở http://localhost:5000/';camState(false);
+  clearTimeout(window._ct);window._ct=setTimeout(connectCam,3000)};
+ im.src=BASE+'/video?t='+Date.now()}
+$('camGo').onclick=connectCam;
+$('fs').onclick=()=>$('stage').requestFullscreen&&$('stage').requestFullscreen();
+$('snap').onclick=()=>{const im=$('cam');if(!im.naturalWidth)return;const c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;
+ try{c.getContext('2d').drawImage(im,0,0);const a=document.createElement('a');a.href=c.toDataURL('image/jpeg',.9);a.download='snapshot-'+Date.now()+'.jpg';a.click()}catch(e){window.open(BASE+'/snapshot','_blank')}};
+
+async function poll(){
+ try{const r=await fetch(BASE+'/events.json',{cache:'no-store'});const j=await r.json();
+  skew=Date.now()/1000-j.now;srvOK=true;
+  const list=j.events.map(e=>({...e,date:new Date(e.t*1000)}));
+  const fresh=[];
+  for(const e of list){if(!seen.has(e.name)){seen.add(e.name);if(!first)fresh.push(e);else if(nowS()-e.t>ACTIVE_S+5)handled.add(e.name)}}
+  events=list;
+  if(fresh.length)newAlert(fresh[fresh.length-1]);
+  first=false;
+ }catch(e){srvOK=false}
+ dot('dSrv',srvOK);$('tSrv').textContent='Máy chủ: '+(srvOK?'Kết nối':'Mất kết nối');render()}
+function newAlert(e){currentName=e.name;handled.delete(e.name);saveH();
+ $('banner').style.display='block';$('banner').textContent='⚠ PHÁT HIỆN TÉ NGÃ – '+ROOM+' – '+fmtT(e.date);beep();if(navigator.vibrate)navigator.vibrate([300,150,300])}
+function saveH(){localStorage.setItem('fsw3h',JSON.stringify([...handled].slice(-200)))}
+const curEvent=()=>{const l=[...events].reverse();return l.find(e=>e.name===currentName)||l[0]||null};
+function render(){
+ const list=[...events].reverse(),cur=curEvent();
+ const open=list.filter(e=>!handled.has(e.name));
+ const active=!!cur&&!handled.has(cur.name)&&(nowS()-cur.t)<ACTIVE_S;
+ $('stage').className='stage'+(active?' alert':'');
+ if(cur){const p=!handled.has(cur.name);
+  $('aCam').textContent='Camera 01 - '+ROOM;$('aTime').textContent=fmtD(cur.date);$('aAgo').textContent=ago(Math.max(0,nowS()-cur.t));$('aFile').textContent=cur.name;
+  const t=$('aThumb');t.style.backgroundImage=`url(${BASE+cur.url})`;t.textContent='';t.onclick=()=>zoom(BASE+cur.url);
+  $('aTag').textContent=p?'Đang xử lý':'Đã xử lý';$('aTag').className='tag'+(p?' bad':'');
+  $('aSent').textContent=p?'🔔 Đã gửi thông báo':'✔ Đã xử lý';$('aSent').style.background=p?'#fdeaea':'#e4f6ea';$('aSent').style.color=p?'#e5484d':'#16a34a'}
+ $('rows').innerHTML=list.length?list.map((e,i)=>`<tr><td>#${String(list.length-i).padStart(3,'0')}</td><td><img src="${BASE+e.url}" onclick="zoom('${BASE+e.url}')"></td><td>${fmtD(e.date)}</td><td><span class="st p">Té ngã</span></td><td><span class="st ${handled.has(e.name)?'d':'p'}">${handled.has(e.name)?'Đã xử lý':'Đang xử lý'}</span></td></tr>`).join(''):'<tr><td colspan="5" class="mut">Chưa có cảnh báo nào</td></tr>';
+ $('gal').innerHTML=list.length?list.map(e=>`<div><img src="${BASE+e.url}" loading="lazy" onclick="zoom('${BASE+e.url}')"><small>${fmtT(e.date)}</small></div>`).join(''):'<span class="mut">Chưa có ảnh nào.</span>';
+ $('sTotal').textContent=list.length;$('sOpen').textContent=open.length;$('sMon').textContent=srvOK&&$('cam').style.display==='block'?1:0;
+ const m=(Date.now()-startT)/60000;$('sUp').textContent=m<60?m.toFixed(1)+' phút':(m/60).toFixed(1)+' giờ';
+ $('sRisk').textContent=active?'Cao':open.length?'Trung bình':'Thấp';$('sRisk').style.color=active?'#e5484d':open.length?'#f59e0b':'#16a34a';
+ $('scan').innerHTML=active?'<span class="dot"></span> Phát hiện người nằm bất động!':'<span class="dot on"></span> Đang quét tìm đối tượng trong phòng...';
+ if(!open.length&&!active)$('banner').style.display='none'}
+function zoom(u){$('lbImg').src=u;$('lb').style.display='grid'}$('lb').onclick=()=>$('lb').style.display='none';
+$('aHandle').onclick=()=>{const c=curEvent();if(!c)return;handled.add(c.name);saveH();render()};
+$('aDetail').onclick=()=>{const c=curEvent();if(c)zoom(BASE+c.url)};
+$('banner').onclick=()=>$('banner').style.display='none';
+$('call').onclick=()=>location.href='tel:'+$('tel').value;
+$('copy').onclick=()=>{const c=curEvent();if(!c)return;navigator.clipboard.writeText(`Phát hiện té ngã lúc ${fmtD(c.date)} tại ${ROOM}. Đã trôi qua ${ago(Math.max(0,nowS()-c.t))}. Ảnh: ${c.name}`)};
+$('csv').onclick=()=>{const list=[...events].reverse();const c='id,time,file,status\n'+list.map((e,i)=>[list.length-i,e.date.toISOString(),e.name,handled.has(e.name)?'handled':'processing'].join(',')).join('\n');
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([c],{type:'text/csv'}));a.download='alerts.csv';a.click()};
+$('sim').onclick=()=>{const e={name:'sim-'+Date.now()+'.jpg',t:nowS(),url:'/snapshot',date:new Date()};events.push(e);seen.add(e.name);newAlert(e);render()};
+setInterval(()=>{const n=new Date();$('clockP').textContent=fmtT(n);$('ts').textContent=fmtDT(n);render()},1000);
+setInterval(poll,1500);
+connectCam();poll();
+</script></body></html>
