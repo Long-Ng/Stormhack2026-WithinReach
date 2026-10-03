@@ -39,3 +39,9 @@ def test_missing_explicit_file_is_an_error(tmp_path):
 def test_relative_model_path_resolves_next_to_params(tmp_path):
     cfg = Config.load(write(tmp_path, 'model_path = "models/x.task"\n'))
     assert cfg.model_path == str(tmp_path / "models" / "x.task")
+
+
+def test_bool_params(tmp_path):
+    assert Config.load(write(tmp_path, "prefer_droidcam = false\n")).prefer_droidcam is False
+    with pytest.raises(ValueError, match="prefer_droidcam"):
+        Config.load(write(tmp_path, "prefer_droidcam = 0\n"))

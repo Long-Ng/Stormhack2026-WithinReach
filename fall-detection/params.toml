@@ -9,7 +9,11 @@ min_pose_presence_confidence = 0.5
 min_tracking_confidence = 0.5
 
 [capture]
-camera_index = 0
+camera_index = 0             # used when no DroidCam phone is streaming
+prefer_droidcam = true       # with no --source, use a connected DroidCam phone if there is one
+droidcam_probe_s = 3.0       # seconds to wait for DroidCam to send a real picture at startup
+placeholder_max_std = 5.0    # frames flatter than this are DroidCam's "no phone" screen
+droidcam_live_frames = 3     # distinct real frames needed before DroidCam counts as streaming
 frame_width = 640
 frame_height = 480
 
@@ -40,6 +44,9 @@ upright_angle = 30.0      # torso angle counted as upright
 recover_s = 1.0           # seconds upright to go back to UPRIGHT
 lost_grace_s = 1.0        # pose lost while down: hold this long, then count as still
 slow_fall_s = 15.0        # lying this long without a fast descent -> prolonged_lying
+
+[events]
+events_dir = "events"     # events.jsonl and snapshot .jpg files, relative to this file
 
 [display]
 fps_smoothing = 0.9
