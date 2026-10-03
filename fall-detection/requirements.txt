@@ -1,0 +1,4 @@
+﻿# opencv-contrib-python comes with mediapipe and provides cv2; do not also install opencv-python (they clash)
+mediapipe>=1.0.1
+numpy
+pytest
