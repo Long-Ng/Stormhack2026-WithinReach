@@ -53,11 +53,17 @@ class FallDetector:
         self._impact_t = t
 
     def is_down(self, f: Features) -> bool:
-        """Horizontal (by torso angle or bbox shape) and, when the ankles are visible, low."""
+        """Horizontal (by torso angle or bbox shape) and low.
+
+        Without the ankles, hip height is unknown and the bbox only covers the upper
+        body, which is wider than tall even when upright (someone at a desk). Then
+        only a tilted torso counts.
+        """
         cfg = self.cfg
+        if f.hip_height is None:
+            return f.torso_angle > cfg.lying_angle
         horizontal = f.torso_angle > cfg.lying_angle or f.bbox_aspect > cfg.lying_aspect
-        low = f.hip_height is None or f.hip_height < cfg.low_hip
-        return horizontal and low
+        return horizontal and f.hip_height < cfg.low_hip
 
     @property
     def confirm_remaining(self) -> float | None:
