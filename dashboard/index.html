@@ -78,6 +78,7 @@ main{flex:1;padding:26px 28px;max-width:1260px}
 .ai small{display:block;color:var(--muted);font-size:11px;margin-top:6px}
 .ff{align-self:flex-start;margin:10px 0 12px;border:1px solid var(--amberln);background:#fff;color:#7a4c00;border-radius:10px;padding:6px 12px;font-weight:700;font-size:13px;cursor:pointer}
 .ff.on{background:#7a4c00;color:#fff;border-color:#7a4c00}
+.demobar{display:flex;gap:10px;flex-wrap:wrap;margin:-8px 0 18px}.demobar .ff{margin:0}
 .shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}
 .shot{background:#f3f4f1;border-radius:14px;overflow:hidden;font-size:13px}
 .shot img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}
@@ -94,7 +95,7 @@ td img{width:90px;border-radius:8px;display:block}
 </head>
 <body>
 <aside>
-  <div class="brand"><div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/></svg></div><span id="appName">Fall Guard</span></div>
+  <div class="brand"><div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/></svg></div><span id="appName">Within Reach</span></div>
   <nav class="nav">
     <a data-v="dash" class="active"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard<span class="badge" id="navBadge">1</span></a>
     <a data-v="cam"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10l6-3v10l-6-3z"/></svg>Live camera</a>
@@ -135,6 +136,10 @@ td img{width:90px;border-radius:8px;display:block}
           <div id="resp"></div>
         </div>
       </div>
+    </div>
+    <div class="demobar">
+      <button class="ff" id="graphBtn">&#128200; Show Graph (For Demo)</button>
+      <button class="ff" id="skelBtn">&#129485; Show Skeleton (For Demo)</button>
     </div>
     <div class="row2">
       <div class="card">
@@ -184,8 +189,9 @@ td img{width:90px;border-radius:8px;display:block}
 
 <script>
 (function(){
-  var D = {app:"Fall Guard", name:"Alex", room:"Living room", addr:"123 Main St", b:"Family member B", c:"Family member C", secs:60};
+  var D = {app:"Within Reach", name:"Alex", room:"Living room", addr:"123 Main St", b:"Family member B", c:"Family member C", secs:60};
   try{ var s = JSON.parse(localStorage.getItem("fd-settings")||"{}"); for(var k in s) D[k]=s[k]; }catch(e){}
+  if(D.app === "Fall Guard") D.app = "Within Reach";  // old name, saved in Settings before the rename
   function $(id){return document.getElementById(id);}
   var alertSince = null, lastData = {events:[], alert:false}, logExtra = [], talk = false, seen = {};
 
@@ -325,6 +331,23 @@ td img{width:90px;border-radius:8px;display:block}
     fetch("/api/demo/speed?fast=" + (fast ? 1 : 0), {method:"POST"})
       .then(function(r){return r.json();}).then(function(d){ showFast(d.fast); }).catch(function(){});
   };
+
+  // Demo overlays on the live video (phone motion graph, tracked skeleton). One shared
+  // setting on the camera PC, the same as the switches on the monitor's phone page.
+  function showDemo(d){
+    $("graphBtn").classList.toggle("on", !!d.graph);
+    $("graphBtn").innerHTML = d.graph ? "&#128200; Hide Graph" : "&#128200; Show Graph (For Demo)";
+    $("skelBtn").classList.toggle("on", !!d.skeleton);
+    $("skelBtn").innerHTML = d.skeleton ? "&#129485; Hide Skeleton" : "&#129485; Show Skeleton (For Demo)";
+  }
+  function loadDemo(){ fetch("/api/demo",{cache:"no-store"}).then(function(r){return r.json();}).then(showDemo).catch(function(){}); }
+  function toggleDemo(key, btn){
+    fetch("/api/demo?" + key + "=" + (btn.classList.contains("on") ? 0 : 1), {method:"POST"})
+      .then(function(r){return r.json();}).then(showDemo).catch(loadDemo);
+  }
+  $("graphBtn").onclick = function(){ toggleDemo("graph", this); };
+  $("skelBtn").onclick = function(){ toggleDemo("skeleton", this); };
+  loadDemo(); setInterval(loadDemo, 5000);  // the phone page may switch them too
 
   setInterval(function(){
     $("clock").textContent = new Date().toLocaleTimeString([], {hour:"numeric", minute:"2-digit", second:"2-digit"});
