@@ -60,7 +60,7 @@ cover_max_std = 12.0         # texture; a covered lens is a flat blur
 # Phone accelerometer via Phyphox: experiment "Acceleration (without g)",
 # menu > Allow remote access. Test with: python imu.py
 # Set imu_url = "" to run camera only. Ignored when replaying a video file.
-imu_url = "http://172.16.164.134:8080"
+imu_url = ""
 imu_poll_s = 0.05
 imu_timeout_s = 2.0
 imu_impact_ms2 = 20.0     # m/s^2 above rest (~2 g); a hard fall is usually higher

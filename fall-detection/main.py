@@ -9,14 +9,16 @@ python main.py --no-display                           # headless
 python main.py --params other.toml                    # use a different parameter file
 python main.py --port 5050                            # dashboard server port (default 5000)
 python main.py --no-dashboard                         # do not start the dashboard server
+python main.py --ntfy my-secret-topic --name Nick     # extra phone push through the ntfy app
 
-While running, open http://localhost:5000/ for the live dashboard.
+While running: desktop dashboard http://localhost:5000/ , phone page http://<PC address>:5000/phone
 """
 
 from __future__ import annotations
 
 import argparse
 import contextlib
+import os
 import sys
 import time
 
@@ -52,7 +54,28 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--no-display", action="store_true", help="run headless")
     p.add_argument("--port", type=int, default=5000, help="dashboard server port")
     p.add_argument("--no-dashboard", action="store_true", help="do not start the dashboard server")
+    p.add_argument("--ntfy", metavar="TOPIC", default=os.environ.get("FALL_NTFY_TOPIC"),
+                   help="ntfy topic for an extra phone push (or set env FALL_NTFY_TOPIC)")
+    p.add_argument("--ntfy-server", default=os.environ.get("FALL_NTFY_SERVER", "https://ntfy.sh"),
+                   help="ntfy server (default https://ntfy.sh)")
+    p.add_argument("--name", default="Người thân", help="name of the monitored person (phone page + push)")
+    p.add_argument("--room", default="Phòng khách", help="room name shown on the phone page")
+    p.add_argument("--address", default="", help="home address shown on the phone page")
+    p.add_argument("--phone", default="911", help="emergency number for the Call button")
+    p.add_argument("--countdown", type=int, default=120,
+                   help="seconds before the phone page says time is up to call (0 = off; it never calls by itself)")
     return p.parse_args()
+
+
+def person_box(lms, min_vis):
+    """Pixel box (x1, y1, x2, y2) around the visible landmarks, or None. lms is (33, 4): x_px, y_px, z, vis."""
+    if lms is None:
+        return None
+    pts = lms[lms[:, 3] >= min_vis]
+    if len(pts) == 0:
+        return None
+    pad = 20
+    return (pts[:, 0].min() - pad, pts[:, 1].min() - pad, pts[:, 0].max() + pad, pts[:, 1].max() + pad)
 
 
 def handle_detection(detection, frame, lms, cfg: Config, sinks, streamer=None,
@@ -77,11 +100,14 @@ def handle_detection(detection, frame, lms, cfg: Config, sinks, streamer=None,
             print(f"dashboard alert failed: {e!r}", file=sys.stderr)
 
 
-def start_dashboard(port: int, cfg: Config):
+def start_dashboard(args, cfg: Config):
     """Start the dashboard/video server. Never lets a dashboard problem stop the detector."""
     try:
         from stream import Streamer
-        return Streamer(port=port, events_dir=cfg.events_dir)
+        s = Streamer(port=args.port, events_dir=cfg.events_dir)
+        s.set_config(name=args.name, room=args.room, address=args.address, phone=args.phone,
+                     countdown=args.countdown, push=True, talk=False)
+        return s
     except Exception as e:
         print(f"[dashboard] disabled: {e!r}", file=sys.stderr)
         return None
@@ -98,7 +124,7 @@ def main() -> int:
         return 1
     print(f"Using {source.label}")
 
-    streamer = None if args.no_dashboard else start_dashboard(args.port, cfg)
+    streamer = None if args.no_dashboard else start_dashboard(args, cfg)
 
     fps = 0.0
     last_wall = time.perf_counter()
@@ -118,8 +144,13 @@ def main() -> int:
         sinks.append(manager)
         for path, handler in manager.routes().items():
             streamer.add_route(path, handler)
-        for path, handler in manager.upload_routes().items():
-            streamer.add_route(path, handler, body=True)
+    # Optional extra push to the ntfy app (snapshot attached, buttons: camera / talk / call).
+    if args.ntfy:
+        try:
+            from notify import NtfySink
+            sinks.append(NtfySink(args.ntfy, args.ntfy_server, args.port, args.name, args.phone))
+        except Exception as e:
+            print(f"[notify] disabled: {e!r}", file=sys.stderr)
     recorder = ClipRecorder(cfg.events_dir, cfg.clip_pre_s, cfg.clip_tail_s, cfg.clip_max_after_s,
                             cfg.clip_max_width, cfg.clip_max_fps)
 
@@ -138,7 +169,10 @@ def main() -> int:
 
             # Clean frame for the dashboard: sent before any overlay is drawn on it.
             if streamer is not None:
-                streamer.update(frame)
+                try:
+                    streamer.update(frame)
+                except Exception as e:
+                    print(f"[dashboard] update failed: {e!r}", file=sys.stderr)
 
             # Video files use their own timestamps so replays are reproducible.
             if is_file:
@@ -168,8 +202,16 @@ def main() -> int:
                 handle_detection(detection, frame, lms, cfg, sinks, streamer, recorder)
             # Clean frame (no overlay yet); the clip runs until the person is back up.
             recorder.add(frame, ts_ms / 1000.0, detector.state is not State.UPRIGHT)
-            if streamer is not None and detector.state.name == "FALL_CONFIRMED":
-                streamer.alert("FALL CONFIRMED")
+
+            # Keep the dashboard alert (and the red box around the person) on while the fall stays confirmed.
+            if streamer is not None:
+                try:
+                    confirmed = detector.state is State.FALL_CONFIRMED
+                    streamer.set_box(person_box(lms, cfg.min_visibility) if confirmed else None)
+                    if confirmed:
+                        streamer.alert("FALL CONFIRMED")
+                except Exception as e:
+                    print(f"[dashboard] alert failed: {e!r}", file=sys.stderr)
             if logger is not None:
                 logger.log(ts_ms / 1000.0, feats)
 

@@ -1,11 +1,14 @@
 """stream.py - put next to main.py (fall-detection/).
 
 Tiny web server (default http://localhost:5000):
-  /                dashboard page (dashboard/index.html or dashboard.html)
+  /                desktop dashboard (dashboard/index.html or dashboard.html)
+  /phone           phone page (dashboard/phone.html)
+  /config.json     name / room / address / emergency number given to main.py
   /video           live MJPEG stream
   /snapshot        latest frame
   /events.json     saved fall snapshots + live alert state (same as /events_api)
-  /events/<file>   one snapshot image
+  /events/<file>   one snapshot image (or clip)
+Extra routes (phone-alert replies etc.) are added with add_route().
 Call update(frame) with a clean frame; the red alert box is drawn here, not in main.py.
 """
 import json
@@ -30,7 +33,13 @@ DASHBOARDS = [
     HERE / "dashboard.html",
     HERE / "index.html",
 ]
+PHONE_PAGES = [HERE.parent / "dashboard" / "phone.html", HERE / "phone.html"]
+MEDIA_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".mp4": "video/mp4", ".webm": "video/webm",
+               ".avi": "video/x-msvideo"}
+MANIFEST = {"name": "Fall Alert", "short_name": "Fall Alert", "start_url": "/phone", "display": "standalone",
+            "background_color": "#f4f4f1", "theme_color": "#b3261e", "icons": []}
 
+# Old dashboards without the "no-inject" marker get this small panel added.
 INJECT = """
 <style>
 #fd-panel{position:fixed;left:16px;bottom:16px;width:340px;max-height:60vh;overflow:auto;background:#fff;
@@ -74,7 +83,12 @@ class Streamer:
         self._jpg, self._last_enc = None, 0.0
         self._alert_until, self._alert_text, self._box = 0.0, "", None
         self._closed = False
+<<<<<<< HEAD
+        self.config = {}
+        self.routes = {}  # path -> handler(query) -> (status, content_type, body); see add_route
+=======
         self._routes = {}  # path -> (handler, wants_body); see add_route
+>>>>>>> 235fc5b37bb6642a065676cba11b89202be73ab0
         outer = self
 
         class H(BaseHTTPRequestHandler):
@@ -90,11 +104,19 @@ class Streamer:
                 self.end_headers()
                 self.wfile.write(body)
 
+<<<<<<< HEAD
+            def _route(self):
+                """Serve a route added with add_route. True if one handled the request."""
+                path, _, qs = self.path.partition("?")
+                handler = outer.routes.get(path)
+                if handler is None:
+=======
             def _route(self, data=b""):
                 """Serve a route added with add_route(). True if one handled the request."""
                 path, _, qs = self.path.partition("?")
                 route = outer._routes.get(path)
                 if route is None:
+>>>>>>> 235fc5b37bb6642a065676cba11b89202be73ab0
                     return False
                 handler, wants_body = route
                 query = {k: v[-1] for k, v in parse_qs(qs).items()}
@@ -123,21 +145,30 @@ class Streamer:
                     if self._route():
                         return
                     if path in ("/", "/dashboard", "/dashboard.html", "/index.html"):
-                        f = outer._find_dashboard()
+                        f = outer._find(DASHBOARDS, "dashboard.html", "index.html")
                         if not f:
                             return self._send(404, b"dashboard html not found in ../dashboard/ or next to stream.py")
                         html = f.read_text(encoding="utf-8")
-                        if "fd-no-inject" not in html:
+                        if "no-inject" not in html:
                             html = html.replace("</body>", INJECT + "</body>", 1) if "</body>" in html else html + INJECT
                         return self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
+                    if path in ("/phone", "/phone.html"):
+                        f = outer._find(PHONE_PAGES, "phone.html")
+                        if not f:
+                            return self._send(404, b"phone.html not found in ../dashboard/ or next to stream.py")
+                        return self._send(200, f.read_bytes(), "text/html; charset=utf-8")
+                    if path == "/manifest.json":
+                        return self._send(200, json.dumps(MANIFEST).encode(), "application/manifest+json")
+                    if path == "/config.json":
+                        return self._send(200, json.dumps(outer.config).encode(), "application/json; charset=utf-8")
                     if path in ("/events.json", "/events_api"):
                         return self._send(200, json.dumps(outer.list_events()).encode(), "application/json")
                     if path.startswith("/events/"):
                         name = Path(path[len("/events/"):]).name
                         d = outer.events_path()
                         f = d / name if d else None
-                        if f and f.suffix.lower() == ".jpg" and f.is_file():
-                            return self._send(200, f.read_bytes(), "image/jpeg")
+                        if f and f.suffix.lower() in MEDIA_TYPES and f.is_file():
+                            return self._send(200, f.read_bytes(), MEDIA_TYPES[f.suffix.lower()])
                         return self._send(404, b"not found")
                     if path == "/snapshot":
                         return self._send(200, outer._jpg, "image/jpeg") if outer._jpg else self._send(503)
@@ -161,16 +192,27 @@ class Streamer:
         self.server = ThreadingHTTPServer(("0.0.0.0", port), H)
         self.server.daemon_threads = True
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
-        print(f"[stream] dashboard -> http://localhost:{port}/")
+        print(f"[stream] dashboard -> http://localhost:{port}/   phone page -> /phone")
         print(f"[stream] events folder -> {self.events_path() or '(not created yet)'}")
 
+<<<<<<< HEAD
+    def add_route(self, path, handler):
+        """Serve path (GET and POST) with handler(query) -> (status, content_type, body)."""
+        self.routes[path] = handler
+=======
     def add_route(self, path, handler, body=False):
         """Serve `path` (GET and POST) with handler(query) -> (status, content_type, body).
         With body=True the handler is called as handler(query, request_body_bytes)."""
         self._routes[path] = (handler, body)
+>>>>>>> 235fc5b37bb6642a065676cba11b89202be73ab0
 
-    def _find_dashboard(self):
-        for p in DASHBOARDS + [Path.cwd() / "dashboard.html", Path.cwd().parent / "dashboard" / "index.html"]:
+    def set_config(self, **kw):
+        """Values shown on the phone page: name, room, address, phone, countdown, push, talk."""
+        self.config.update(kw)
+
+    def _find(self, candidates, *names):
+        extra = [Path.cwd() / n for n in names] + [Path.cwd().parent / "dashboard" / n for n in names]
+        for p in list(candidates) + extra:
             if p.is_file():
                 return p
         return None
@@ -194,13 +236,13 @@ class Streamer:
 
     def list_events(self):
         d = self.events_path()
-        kinds = {}
+        info = {}
         if d and (d / "events.jsonl").is_file():
             for line in (d / "events.jsonl").read_text(encoding="utf-8").splitlines():
                 try:
                     e = json.loads(line)
                     if e.get("snapshot_path"):
-                        kinds[Path(e["snapshot_path"]).name] = e.get("kind", "fall")
+                        info[Path(e["snapshot_path"]).name] = e
                 except ValueError:
                     pass
         out = []
@@ -211,7 +253,15 @@ class Streamer:
                     t = datetime.strptime(m.group(1) + m.group(2), "%Y%m%d%H%M%S").timestamp() + int(m.group(3)) / 1000
                 else:
                     t = f.stat().st_mtime
-                out.append({"name": f.name, "t": t, "url": f"/events/{f.name}", "kind": kinds.get(f.name, "fall")})
+                e = info.get(f.name, {})
+                item = {"name": f.name, "t": t, "url": f"/events/{f.name}", "kind": e.get("kind", "fall"),
+                        "peak_hip_vel": e.get("peak_hip_vel"), "torso_angle": e.get("torso_angle"),
+                        "stream_t": e.get("stream_t")}
+                if e.get("clip_path"):
+                    clip = Path(e["clip_path"]).name
+                    if (d / clip).is_file():
+                        item["clip"] = f"/events/{clip}"
+                out.append(item)
         return {"now": time.time(), "events": out[-100:],
                 "alert": time.time() < self._alert_until, "alert_text": self._alert_text}
 
