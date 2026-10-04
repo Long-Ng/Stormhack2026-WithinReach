@@ -182,9 +182,10 @@ def main() -> int:
             GeminiClient(gemini_key, cfg.gemini_model, fallback_models=(cfg.gemini_fallback_model,)),
             on_report=lambda inc_id, r, minutes: manager.add_report(
                 inc_id, report_dict(r, minutes, cfg.emergency_number)),
-            is_open=manager.is_open, update_s=cfg.gemini_update_s)
+            is_open=manager.is_open, update_s=cfg.gemini_update_s,
+            max_updates=int(cfg.gemini_max_minutes * 60 / cfg.gemini_update_s))
         print(f"[gemini] fall analysis on ({cfg.gemini_model}), "
-              f"updates every {cfg.gemini_update_s / 60:g} min")
+              f"checks every {cfg.gemini_update_s:g} s for {cfg.gemini_max_minutes:g} min")
     elif alerts is not None:
         print("[gemini] off: set gemini_api_key in params.local.toml to describe falls")
 

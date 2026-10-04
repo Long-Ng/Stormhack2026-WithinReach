@@ -236,3 +236,31 @@ def test_first_look_uses_video():
 def test_first_look_falls_back_to_eight_images():
     used, r = first_report(video_fails=True)
     assert used == ["video", "images:8"] and r.fall_type == "sideways"
+
+
+def test_checks_every_minute_notify_only_on_change_or_every_five_minutes():
+    cfg = Config(ntfy_person_topic="person-x", ntfy_monitor_topic="monitor-x", gemini_notify_s=300.0)
+    sent = []
+    m = AlertManager(cfg, "http://pc:5000", sent.append, clock=lambda: 1_700_000_000.0)
+    m.send(FallEvent(timestamp=1_700_000_000.0, kind="fall", peak_hip_vel=3, torso_angle=90,
+                     snapshot_path=None, stream_t=1))
+    inc_id = m.last_incident_id
+    m.respond(inc_id, HELP)                       # monitor alerted
+    alerted = len(sent)
+
+    def check(minute, **kw):
+        r = report_dict(report(**kw), minute) | {"t": 1_700_000_000.0 + minute * 60}
+        m.add_report(inc_id, r)
+
+    check(1, movement="small_movements")          # first update: sent
+    check(2, movement="small_movements")          # same state, 1 min later: quiet
+    check(3, movement="small_movements")          # quiet
+    check(4, movement="still")                    # changed: sent at once
+    check(5, movement="still")                    # still 5 min -> urgent: sent at once
+    check(6, movement="still")                    # quiet
+    check(10, movement="still")                   # same, but 5 min since the last one: sent
+    titles = [s["title"] for s in sent[alerted:]]
+    assert [t.split(" - ")[0].split(", ")[1] for t in titles] == [
+        "1 min after the fall", "4 min after the fall", "5 min after the fall", "10 min after the fall"]
+    assert sent[alerted + 2]["priority"] == 5      # the escalation is loud
+    assert len(m.incidents[inc_id].reports) == 7   # every check is still kept

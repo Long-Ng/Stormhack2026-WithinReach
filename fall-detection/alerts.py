@@ -58,6 +58,7 @@ class Incident:
     snapshot: str | None        # file name inside events_dir
     replied_t: float | None = None
     reports: list[dict] = field(default_factory=list)  # Gemini analyses, oldest first
+    sent_report: dict | None = None  # the last analysis the monitor was notified about
 
 
 def lan_url(port: int) -> str:
@@ -136,16 +137,23 @@ class AlertManager:
         return inc is not None and inc.status != OK
 
     def add_report(self, incident_id: str, report: dict) -> None:
-        """Store an analysis (gemini.report_dict). Once the monitor has been alerted,
-        each one is sent to them; before that, the first one goes into their alert."""
+        """Store an analysis (gemini.report_dict); the first one goes into the monitor's
+        alert. Once alerted, the monitor is notified when position, movement or urgency
+        changed, and otherwise at most every gemini_notify_s, so a check every minute
+        does not mean a notification every minute."""
         with self._lock:
             inc = self.incidents.get(incident_id)
             if inc is None:
                 return
             inc.reports.append(report)
-            alerted = inc.status in (HELP, NO_REPLY)
-        if alerted:
-            self.publish(self._monitor_update_message(inc, report))
+            if inc.status not in (HELP, NO_REPLY):
+                return
+            last = inc.sent_report
+            if last is not None and _same_state(last, report) and \
+                    report["t"] - last["t"] < self.cfg.gemini_notify_s:
+                return
+            inc.sent_report = report
+        self.publish(self._monitor_update_message(inc, report))
 
     # --- called by main.py every frame ----------------------------------------------
     def tick(self) -> None:
@@ -323,6 +331,7 @@ class AlertManager:
                                    "url": f"tel:{self.cfg.person_number}"})
         if inc.reports:  # Gemini already looked at the fall
             msg["message"] += "\n" + self._report_text(inc.reports[-1])
+            inc.sent_report = inc.reports[-1]
         if inc.snapshot and self.cfg.ntfy_attach_snapshot:
             msg["attach"] = f"{self.base_url}/events/{quote(inc.snapshot)}"
         return msg
@@ -355,6 +364,10 @@ class AlertManager:
 
     def _dashboard_url(self, inc: Incident) -> str:
         return f"{self.base_url}/?event={quote(inc.snapshot)}" if inc.snapshot else f"{self.base_url}/"
+
+
+def _same_state(a: dict, b: dict) -> bool:
+    return all(a.get(k) == b.get(k) for k in ("position", "movement", "urgency"))
 
 
 def _hhmm(t: float) -> str:

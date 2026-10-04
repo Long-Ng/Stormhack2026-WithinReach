@@ -2,7 +2,7 @@
 
     fall confirmed --> 6 s video up to the confirmation --> Gemini --> FallReport
                        (8 still images instead if the video request fails)
-    every gemini_update_s while the incident is open --> latest frames --> FallReport
+    every gemini_update_s (1 min) while the incident is open --> latest frames --> FallReport
 
 Video shows how fast the person went down, which is most of the difference between
 a fall and lying down on purpose; the updates only need the current state.
@@ -316,7 +316,7 @@ class FallAnalyst:
 
     def __init__(self, client: GeminiClient, on_report: Callable[[str, FallReport, float], None],
                  is_open: Callable[[str], bool] = lambda _id: True,
-                 update_s: float = 300.0, max_updates: int = 12):
+                 update_s: float = 60.0, max_updates: int = 60):
         self.client, self.on_report, self.is_open = client, on_report, is_open
         self.update_s, self.max_updates = update_s, max_updates
         self.watches: dict[str, _Watch] = {}
