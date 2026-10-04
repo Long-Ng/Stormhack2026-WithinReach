@@ -94,6 +94,6 @@ def test_fallen_page_is_served(tmp_path):
     s = Streamer(port=5089, events_dir=tmp_path)
     try:
         html = urllib.request.urlopen("http://127.0.0.1:5089/fallen?src=phone&t=1&g=2.5").read().decode()
-        assert "Are you OK?" in html and 'id="okBtn"' in html and 'id="callBtn"' in html
+        assert "Are you ok?" in html and 'id="aOk"' in html and 'id="aCall"' in html
     finally:
         s.close()
