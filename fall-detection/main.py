@@ -9,6 +9,7 @@ python main.py --no-display                           # headless
 python main.py --params other.toml                    # use a different parameter file
 python main.py --port 5050                            # dashboard server port (default 5000)
 python main.py --no-dashboard                         # do not start the dashboard server
+python main.py --inject fall.mp4 --inject-hold 10     # debug: press i to splice a clip into the live feed
 python main.py --ntfy my-secret-topic --name Nick     # extra phone push through the ntfy app
 
 While running: desktop dashboard http://localhost:5000/ , phone page http://<PC address>:5000/phone
@@ -32,6 +33,7 @@ from cover import CoverReset
 from detector import FallDetector, State
 from events import ConsoleSink, FallEvent, FileSink, dispatch, save_snapshot
 from features import FeatureExtractor, FeatureLogger
+from inject import Injector
 from imu import open_wearable
 from overlay import draw_overlay, draw_skeleton
 from pose import PoseEstimator
@@ -64,6 +66,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--phone", default="911", help="emergency number for the Call button")
     p.add_argument("--countdown", type=int, default=120,
                    help="seconds before the phone page says time is up to call (0 = off; it never calls by itself)")
+    p.add_argument("--inject", metavar="VIDEO", action="append", default=[],
+                   help="debug: video to splice into the live feed; press i to play (repeat for several)")
+    p.add_argument("--inject-hold", type=float, default=5.0, metavar="S",
+                   help="keep showing the injected clip's last frame this long (default 5)")
+    p.add_argument("--inject-after", type=float, default=None, metavar="S",
+                   help="play the first injected clip automatically S seconds after start")
     return p.parse_args()
 
 
@@ -156,6 +164,17 @@ def main() -> int:
     recorder = ClipRecorder(cfg.events_dir, cfg.clip_pre_s, cfg.clip_tail_s, cfg.clip_max_after_s,
                             cfg.clip_max_width, cfg.clip_max_fps)
 
+    injector = None
+    if args.inject:
+        if is_file:
+            print("[inject] ignored: only for a live camera (--source is a file)", file=sys.stderr)
+        else:
+            injector = Injector(args.inject, args.inject_hold)
+            print(f"[inject] {len(args.inject)} clip(s); press i in the window to play"
+                  + (f", first one at {args.inject_after:g} s" if args.inject_after is not None else ""))
+    inject_at = args.inject_after
+    start_injection = False
+
     with contextlib.ExitStack() as stack:
         stack.callback(recorder.close)  # finish the clip in progress on exit
         if alerts is not None:
@@ -163,9 +182,29 @@ def main() -> int:
         estimator = stack.enter_context(PoseEstimator(cfg))
         logger = stack.enter_context(FeatureLogger(args.log_features)) if args.log_features else None
         while True:
-            ok, frame = cap.read()
-            if not ok:
-                break
+            injected = None
+            if injector is not None:
+                live_t = time.perf_counter() - start_wall
+                if inject_at is not None and live_t >= inject_at:
+                    inject_at = None
+                    start_injection = True
+                if start_injection:
+                    start_injection = False
+                    if injector.start(live_t):
+                        extractor, detector = FeatureExtractor(cfg), FallDetector(cfg)  # new scene
+                        print(f"[inject] playing {injector.label}")
+                if injector.active:
+                    cap.grab()  # keep the camera's buffer fresh while its frames are not used
+                    injected = injector.read(time.perf_counter() - start_wall)
+                    if injected is None:  # clip over: back to the camera, from a clean state
+                        extractor, detector = FeatureExtractor(cfg), FallDetector(cfg)
+                        print("[inject] done, back to the live camera")
+            if injected is not None:
+                frame, injected_t = injected
+            else:
+                ok, frame = cap.read()
+                if not ok:
+                    break
             if alerts is not None:
                 manager.tick()  # escalate to the monitor when the person has not replied
 
@@ -177,7 +216,9 @@ def main() -> int:
                     print(f"[dashboard] update failed: {e!r}", file=sys.stderr)
 
             # Video files use their own timestamps so replays are reproducible.
-            if is_file:
+            if injected is not None:
+                ts_ms = injected_t * 1000.0  # paced on the live clock
+            elif is_file:
                 ts_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
             else:
                 ts_ms = (time.perf_counter() - start_wall) * 1000.0
@@ -224,10 +265,15 @@ def main() -> int:
 
             if not args.no_display:
                 draw_overlay(frame, lms, feats, detector, fps, cfg.min_visibility, cover, wearable)
+                if injector is not None and injector.active:
+                    cv2.putText(frame, injector.label, (10, frame.shape[0] - 12),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2, cv2.LINE_AA)
                 cv2.imshow(WINDOW, frame)
                 key = cv2.waitKey(1) & 0xFF
                 if key in (ord("q"), 27):  # q or Esc
                     break
+                if key == ord("i") and injector is not None:
+                    start_injection = True  # next clip from the next frame on
                 if cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) < 1:
                     break  # window closed with the X button
 
