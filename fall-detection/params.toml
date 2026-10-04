@@ -94,6 +94,7 @@ room_name = "Living room"
 public_url = ""               # empty = http://<this PC's Wi-Fi IP>:<port>
 
 [skeleton]
+privacy_view = false         # start in Privacy view (outline only, no camera picture); switchable on the phone page
 # Smoothing of the DRAWN skeleton (overlay and privacy view). Detection uses raw landmarks.
 # Measured on the benchmark clips: wobble 1.40 -> 0.45 px/frame, lag ~3 px when moving fast.
 skel_min_cutoff = 0.3        # lower = calmer when still, more lag

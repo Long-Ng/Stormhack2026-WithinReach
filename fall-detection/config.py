@@ -92,6 +92,8 @@ class Config:
     room_name: str = "Living room"
     public_url: str = ""  # address phones use to reach this PC; empty = http://<LAN IP>:<port>
 
+    privacy_view: bool = False  # start with the outline-only view on (the monitor can switch it)
+
     # Skeleton display smoothing (drawing and privacy view only; detection uses raw landmarks)
     skel_min_cutoff: float = 0.3  # Hz; lower = calmer when still, more lag
     skel_beta: float = 0.12  # how fast the cutoff rises with joint speed (px/s); higher = less lag when moving

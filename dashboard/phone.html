@@ -43,6 +43,15 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;z-index:40;flex-direction:column;justify-content:center;padding:14px}
 .modal.on{display:flex}.modal img{width:100%;border-radius:14px}.modal p{color:#fff;text-align:center}
 .modal button{background:#fff;border:0;border-radius:12px;padding:13px;font-weight:800;font-size:15px}
+/* Privacy view switch */
+.priv{display:flex;align-items:center;gap:14px;background:#fff;border-radius:22px;padding:14px 18px;margin-top:12px;cursor:pointer}
+.priv .txt{flex:1}.priv b{display:block;font-size:16px}.priv .txt span{display:block;color:var(--mut);font-size:14px;margin-top:3px;line-height:1.35}
+.priv input{position:absolute;opacity:0;pointer-events:none}
+.priv .sw{flex:none;width:52px;height:32px;border-radius:99px;background:#cfd6d2;position:relative;transition:background .2s}
+.priv .sw:after{content:"";position:absolute;top:3px;left:3px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .2s}
+.priv input:checked + .sw{background:var(--green)}.priv input:checked + .sw:after{left:23px}
+.priv input:focus-visible + .sw{outline:3px solid #9cc3b8;outline-offset:2px}
+.pill.priv-on{left:auto;right:12px;top:auto;bottom:12px;display:none}
 </style>
 </head>
 <body>
@@ -58,7 +67,13 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
     <img id="vid" alt="">
     <div class="vmsg" id="vmsg">Waiting for video from main.py...</div>
     <span class="tag" id="vtag"></span>
+    <span class="pill priv-on" id="privPill">&#128100; Outline only</span>
   </div>
+
+  <label class="priv" for="priv">
+    <span class="txt"><b>Privacy view</b><span id="privHint">Show them as a simple outline instead of the camera picture. Only the outline is shared, including alert photos and clips.</span></span>
+    <input type="checkbox" id="priv" role="switch" aria-describedby="privHint"><span class="sw"></span>
+  </label>
 
   <div class="voice" id="voice">&#128266; Your voice is playing in the room</div>
 
@@ -185,6 +200,19 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
   function talkUp(){ tb.classList.remove("talking"); $("voice").style.display="none"; }
   tb.addEventListener("pointerdown",talkDown); tb.addEventListener("pointerup",talkUp); tb.addEventListener("pointercancel",talkUp); tb.addEventListener("pointerleave",talkUp);
   if(location.hash==="#talk") setTimeout(function(){toast("Two-way talk is not connected yet. Please call directly.");},800);
+
+  // ---- Privacy view: one shared setting on the camera PC (it stops sending the camera picture) ----
+  function showPriv(on){ $("priv").checked=on; $("privPill").style.display=on?"block":"none"; }
+  function privHint(){ $("privHint").textContent="Show "+cfg.name+" as a simple outline instead of the camera picture. Only the outline is shared, including alert photos and clips."; }
+  function loadPriv(){ fetch("/api/privacy",{cache:"no-store"}).then(function(r){return r.json();}).then(function(j){showPriv(!!j.on);}).catch(function(){}); }
+  $("priv").onchange=function(){
+    var want=$("priv").checked;
+    fetch("/api/privacy?on="+(want?1:0),{method:"POST"}).then(function(r){return r.json();})
+      .then(function(j){showPriv(!!j.on); toast(j.on?"Privacy view on: only an outline is shown.":"Camera picture is back on.");})
+      .catch(function(){showPriv(!want); toast("Couldn't reach the camera. Try again.");});
+  };
+  loadPriv(); setInterval(loadPriv,5000);  // someone else may switch it
+  fetch("/config.json").then(function(r){return r.json();}).then(function(c){if(c.name)cfg.name=c.name;privHint();}).catch(function(){});
 
   video(); poll(); setInterval(poll,2000);
 })();

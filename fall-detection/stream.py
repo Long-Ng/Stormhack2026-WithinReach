@@ -84,10 +84,14 @@ class Streamer:
         self._explicit = Path(events_dir) if events_dir else None
         self._jpg, self._last_enc = None, 0.0
         self._alert_until, self._alert_text, self._box = 0.0, "", None
+        # Privacy view: when on, main.py sends a stick-figure picture instead of the camera
+        # image (live view, snapshots and clips). One shared setting for everyone watching.
+        self.privacy = False
         self._closed = False
         self.config = {}
         self.routes = {}       # path -> handler(query) -> (status, content_type, body); GET and POST
         self.post_routes = {}  # path -> handler(query, body, headers) -> (status, content_type, body); POST only
+        self.routes["/api/privacy"] = self._privacy_route
         self.onboarding = None
         outer = self
 
@@ -217,6 +221,13 @@ class Streamer:
             print(f"[stream] onboarding data -> {HERE / 'data'}")
         except Exception as e:
             print(f"[stream] onboarding disabled: {e!r}")
+
+    def _privacy_route(self, query):
+        """GET /api/privacy -> {"on": bool}; POST /api/privacy?on=1|0 switches it."""
+        if "on" in query:
+            self.privacy = query["on"] in ("1", "true", "on")
+            print(f"[stream] privacy view {'on' if self.privacy else 'off'}")
+        return 200, "application/json", json.dumps({"on": self.privacy}).encode()
 
     def add_route(self, path, handler):
         """Serve path (GET and POST) with handler(query) -> (status, content_type, body)."""

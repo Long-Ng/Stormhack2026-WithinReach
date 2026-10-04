@@ -127,3 +127,34 @@ def draw_overlay(frame: np.ndarray, lms: Landmarks | None, feats: Features | Non
 
     h, w = frame.shape[:2]
     draw_text(frame, f"FPS {fps:5.1f}", (w - 130, 25))
+
+
+PRIVACY_BG = (46, 36, 30)        # dark slate (BGR)
+PRIVACY_LINE = (235, 225, 215)
+PRIVACY_JOINT = (120, 200, 255)
+
+
+def render_privacy_frame(shape: tuple, lms: Landmarks | None, min_visibility: float) -> np.ndarray:
+    """A stick-figure picture with no camera pixels: plain background, the (stabilized)
+    skeleton, and a round head. Used for the privacy view, its snapshots and clips."""
+    h, w = shape[:2]
+    frame = np.full((h, w, 3), PRIVACY_BG, np.uint8)
+    thick = max(3, round(w / 160))
+    if lms is not None:
+        visible = lms[:, 3] >= min_visibility
+        pts = lms[:, :2].astype(int)
+        for a, b in SKELETON:
+            if visible[a] and visible[b]:
+                cv2.line(frame, tuple(pts[a]), tuple(pts[b]), PRIVACY_LINE, thick, cv2.LINE_AA)
+        for i in JOINTS:
+            if visible[i] and i != 0:
+                cv2.circle(frame, tuple(pts[i]), thick + 2, PRIVACY_JOINT, -1, cv2.LINE_AA)
+        if visible[0]:
+            r = thick * 4
+            if visible[11] and visible[12]:  # head size from shoulder width
+                r = max(r, int(0.3 * np.linalg.norm(lms[11, :2] - lms[12, :2])))
+            cv2.circle(frame, tuple(pts[0]), r, PRIVACY_LINE, thick, cv2.LINE_AA)
+    else:
+        draw_text(frame, "No one in view", (16, h - 20), (170, 170, 170), scale=0.7)
+    draw_text(frame, "Privacy view", (w - 175, h - 20), (170, 170, 170), scale=0.6)
+    return frame
