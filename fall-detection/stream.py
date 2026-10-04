@@ -39,6 +39,7 @@ DASHBOARDS = [
 PHONE_PAGES = [HERE.parent / "dashboard" / "phone.html", HERE / "phone.html"]
 MAIN_PAGES = [HERE.parent / "dashboard" / "mainscreen.html", HERE / "mainscreen.html"]
 ONBOARDING_PAGES = [HERE.parent / "dashboard" / "onboarding.html", HERE / "onboarding.html"]
+FALLEN_PAGES = [HERE.parent / "dashboard" / "fallen.html", HERE / "fallen.html"]
 MEDIA_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".mp4": "video/mp4", ".webm": "video/webm",
                ".avi": "video/x-msvideo"}
 OLD_PATHS = {"/phone": "/monitor", "/phone.html": "/monitor", "/person": "/granny"}
@@ -186,6 +187,11 @@ class Streamer:
                         f = outer._find(MAIN_PAGES, "mainscreen.html")
                         if not f:
                             return self._send(404, b"mainscreen.html not found in ../dashboard/ or next to stream.py")
+                        return self._send(200, f.read_bytes(), "text/html; charset=utf-8")
+                    if path in ("/fallen", "/fallen.html"):  # "Are you OK?" after a fall (index.html opens it)
+                        f = outer._find(FALLEN_PAGES, "fallen.html")
+                        if not f:
+                            return self._send(404, b"fallen.html not found in ../dashboard/ or next to stream.py")
                         return self._send(200, f.read_bytes(), "text/html; charset=utf-8")
                     if path in ("/onboarding", "/onboarding.html"):
                         f = outer._find(ONBOARDING_PAGES, "onboarding.html")

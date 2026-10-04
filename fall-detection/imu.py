@@ -97,7 +97,9 @@ class Wearable:
         impacts = [[round(now - h.t, 3), round(h.peak, 2)] for h in list(self.impact_log) if now - h.t <= seconds]
         hit = self.last_impact
         suspect = (None if hit is None or now - hit.t > self.cfg.imu_suspect_s
-                   else {"age": round(now - hit.t, 1), "g": round(hit.peak / 9.81, 1)})
+                   else {"age": round(now - hit.t, 1), "g": round(hit.peak / 9.81, 1),
+                         # wall-clock time of the shock: a stable id for "is this a new shock?"
+                         "t": round(time.time() - (time.perf_counter() - hit.t), 1)})
         return {"available": True, "seconds": seconds, "threshold": self.cfg.imu_impact_ms2,
                 "accel": round(self.accel, 2), "samples": samples, "impacts": impacts,
                 "suspect": suspect}  # latest phone shock within imu_suspect_s, or None

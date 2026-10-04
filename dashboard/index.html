@@ -1281,6 +1281,7 @@ fdDetect();
     $("pgSus").style.display = s ? "inline-block" : "none";
     $("pgSus").textContent = s ? t("fallSus") + " \u00B7 " + t("shockL") + " " + s.g + " g" : "";
     $("pgSus").closest(".pgraph").classList.toggle("suspect", !!s);
+    if(s && s.t) goFallen("phone:" + s.t, "src=phone&t=" + s.t + "&g=" + s.g);
   }
   function drawPhone(d){
     if(!d || !d.available){ phoneNa(t("phoneNa") + (d && d.reason ? " · " + d.reason : "")); return; }
@@ -1318,6 +1319,23 @@ fdDetect();
       .then(function(){ phoneBusy = false; });
   }
   pollPhone(); setInterval(pollPhone, 250);
+
+  // A detected fall opens the "Are you OK?" screen (/fallen): a 2-minute countdown with
+  // "I'm OK" and "Call 911". Once per fall, so coming back here does not bounce straight back.
+  var fallenSeen = ld("fd.fallen.seen", {});
+  function goFallen(key, qs){
+    if(fallenSeen[key]) return;
+    fallenSeen[key] = Date.now(); sv("fd.fallen.seen", fallenSeen);
+    location.href = B() + "/fallen?" + qs;
+  }
+  function checkCameraFall(){
+    fetch(B()+"/events.json",{cache:"no-store"}).then(function(r){return r.json();}).then(function(d){
+      if(!d || !d.alert || !d.events || !d.events.length) return;
+      var e = d.events.reduce(function(a, b){ return b.t > a.t ? b : a; });   // the newest fall
+      goFallen("cam:" + e.name, "src=camera&ev=" + encodeURIComponent(e.name) + "&t=" + e.t);
+    }).catch(function(){});
+  }
+  checkCameraFall(); setInterval(checkCameraFall, 2000);
 
   poll(); setInterval(poll, 2000); setInterval(tick, 500);
 })();

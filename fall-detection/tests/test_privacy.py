@@ -87,3 +87,13 @@ def test_demo_graph_without_a_phone_says_so():
     f = np.full((480, 640, 3), 120, np.uint8)
     draw_phone_graph(f, None)
     assert f[-45, -20].mean() < 120  # dimmed panel with the message
+
+
+def test_fallen_page_is_served(tmp_path):
+    from stream import Streamer
+    s = Streamer(port=5089, events_dir=tmp_path)
+    try:
+        html = urllib.request.urlopen("http://127.0.0.1:5089/fallen?src=phone&t=1&g=2.5").read().decode()
+        assert "Are you OK?" in html and 'id="okBtn"' in html and 'id="callBtn"' in html
+    finally:
+        s.close()
