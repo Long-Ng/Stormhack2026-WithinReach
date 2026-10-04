@@ -66,3 +66,12 @@ def test_clips_play_in_turn(tmp_path):
     a, b = make_clip(tmp_path / "a.mp4"), make_clip(tmp_path / "b.mp4")
     inj = Injector([a, b], sleep=Clock().sleep)
     assert [inj.start(0.0), inj.start(0.0), inj.start(0.0)] == [a, b, a]
+
+
+def test_folders_expand_to_their_videos(tmp_path):
+    (tmp_path / "s1").mkdir()
+    b = make_clip(tmp_path / "s1" / "b.avi")
+    a = make_clip(tmp_path / "s1" / "a.mp4")
+    (tmp_path / "s1" / "notes.txt").write_text("x")
+    from inject import expand_videos
+    assert expand_videos([str(tmp_path / "s1"), "c.mp4"]) == [a, b, "c.mp4"]
