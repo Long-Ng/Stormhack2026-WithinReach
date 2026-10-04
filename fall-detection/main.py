@@ -35,7 +35,8 @@ from events import ConsoleSink, FallEvent, FileSink, dispatch, save_snapshot
 from features import FeatureExtractor, FeatureLogger
 from gemini import FallAnalyst, FrameHistory, GeminiClient, report_dict
 from imu import open_wearable
-from overlay import draw_overlay, draw_skeleton
+from inject import KEYS as INJECT_KEYS, ClipInjector
+from overlay import draw_overlay, draw_skeleton, draw_text
 from pose import PoseEstimator
 
 WINDOW = "Fall Detection"
@@ -54,6 +55,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--params", metavar="TOML", default=None,
                    help="parameter file (default: params.toml next to main.py)")
     p.add_argument("--no-display", action="store_true", help="run headless")
+    p.add_argument("--inject", metavar="VIDEO_OR_FOLDER", default=None,
+                   help="demo: press I or Space in the camera window to play this clip as if it were live")
     p.add_argument("--port", type=int, default=5000, help="dashboard server port")
     p.add_argument("--no-dashboard", action="store_true", help="do not start the dashboard server")
     p.add_argument("--ntfy", metavar="TOPIC", default=os.environ.get("FALL_NTFY_TOPIC"),
@@ -121,6 +124,19 @@ def main() -> int:
 
     source = open_source(args.source, cfg)
     cap, is_file = source.cap, source.is_file
+    injector = None
+    inject_base_ms = live_offset_ms = 0.0  # timeline bookkeeping for demo clips
+    last_ts_ms = -1.0
+    if args.inject:
+        if is_file:
+            print("[inject] only works with a live camera; ignoring --inject")
+        else:
+            try:
+                injector = ClipInjector(args.inject)
+                print(f"[inject] press I or Space in the camera window to play: "
+                      + ", ".join(c.name for c in injector.clips))
+            except FileNotFoundError as e:
+                print(f"[inject] {e}", file=sys.stderr)
     if not cap.isOpened():
         print(f"Could not open {source.label}", file=sys.stderr)
         return 1
@@ -179,7 +195,17 @@ def main() -> int:
         estimator = stack.enter_context(PoseEstimator(cfg))
         logger = stack.enter_context(FeatureLogger(args.log_features)) if args.log_features else None
         while True:
-            ok, frame = cap.read()
+            if injector is not None and injector.active:
+                ok, frame = injector.read()
+                if not ok:  # clip finished
+                    print("[inject] clip ended: back to the live camera")
+                    extractor = FeatureExtractor(cfg)  # no fake jump across the switch
+                    live_offset_ms = last_ts_ms - (time.perf_counter() - start_wall) * 1000.0
+                    for _ in range(5):
+                        cap.grab()  # skip camera frames queued while the clip played
+                    ok, frame = cap.read()
+            else:
+                ok, frame = cap.read()
             if not ok:
                 break
             if alerts is not None:
@@ -192,11 +218,16 @@ def main() -> int:
                 except Exception as e:
                     print(f"[dashboard] update failed: {e!r}", file=sys.stderr)
 
-            # Video files use their own timestamps so replays are reproducible.
-            if is_file:
+            # Video files use their own timestamps so replays are reproducible; so does an
+            # injected demo clip (continuing from where the live clock was).
+            if injector is not None and injector.active:
+                ts_ms = inject_base_ms + injector.elapsed_ms
+            elif is_file:
                 ts_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
             else:
-                ts_ms = (time.perf_counter() - start_wall) * 1000.0
+                ts_ms = (time.perf_counter() - start_wall) * 1000.0 + live_offset_ms
+            ts_ms = max(ts_ms, last_ts_ms + 1.0)  # strictly increasing across switches
+            last_ts_ms = ts_ms
 
             # Cover the lens for cover_reset_s to start detection over.
             if cover is not None and cover.update(frame, ts_ms / 1000.0):
@@ -248,10 +279,25 @@ def main() -> int:
 
             if not args.no_display:
                 draw_overlay(frame, lms, feats, detector, fps, cfg.min_visibility, cover, wearable)
+                if injector is not None and injector.active:  # this window only, not the dashboard
+                    draw_text(frame, f"DEMO CLIP: {injector.name}", (frame.shape[1] // 2 - 140, 30),
+                              (0, 0, 255), scale=0.7)
                 cv2.imshow(WINDOW, frame)
                 key = cv2.waitKey(1) & 0xFF
                 if key in (ord("q"), 27):  # q or Esc
                     break
+                if key in INJECT_KEYS:
+                    if injector is None:
+                        print("[inject] start main.py with --inject <video or folder> to use I / Space")
+                    else:
+                        print(f"[inject] {injector.toggle()}")
+                        extractor = FeatureExtractor(cfg)  # no fake jump across the switch
+                        if injector.active:
+                            inject_base_ms = last_ts_ms + 1.0
+                        else:
+                            live_offset_ms = last_ts_ms - (time.perf_counter() - start_wall) * 1000.0
+                            for _ in range(5):
+                                cap.grab()
                 if cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) < 1:
                     break  # window closed with the X button
 
