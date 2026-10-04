@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fall alert dashboard</title>
+<!-- fd-no-inject -->
+<style>
+:root{
+  --bg:#f5f5f1; --card:#fff; --ink:#14231f; --muted:#5d6b66; --line:#e7e9e4;
+  --green:#14532d; --greenbg:#e5f0ea; --red:#b42318; --reddk:#8f1a12; --amber:#c27a0e; --amberbg:#fdf3dc; --amberln:#e8b84a;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);display:flex;min-height:100vh}
+button{font:inherit;cursor:pointer}
+aside{width:226px;background:#fff;border-right:1px solid var(--line);padding:24px 16px;position:sticky;top:0;height:100vh;flex-shrink:0}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;margin:0 8px 26px}
+.logo{width:34px;height:34px;border-radius:9px;background:var(--green);display:grid;place-items:center}
+.nav a{display:flex;align-items:center;gap:12px;padding:12px;border-radius:10px;color:var(--ink);text-decoration:none;font-weight:600;font-size:15px;margin-bottom:6px;cursor:pointer}
+.nav a.active{background:#fbe7e4;color:var(--reddk)}
+.nav a .badge{margin-left:auto;background:var(--red);color:#fff;border-radius:999px;min-width:22px;height:22px;display:none;place-items:center;font-size:12px;padding:0 6px}
+.nav svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+main{flex:1;padding:26px 28px;max-width:1260px}
+.banner{border-radius:20px;padding:22px 26px;display:flex;align-items:center;gap:20px;color:#fff;margin-bottom:22px;background:var(--red)}
+.banner.ok{background:var(--green)}
+.banner .ico{width:56px;height:56px;border-radius:14px;background:rgba(255,255,255,.18);display:grid;place-items:center;flex-shrink:0}
+.banner .ico svg{width:30px;height:30px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.banner .t{flex:1}
+.banner .k{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;opacity:.92}
+.banner h1{margin:2px 0 4px;font-size:28px;line-height:1.15}
+.banner .s{opacity:.92;font-size:15px}
+.timer{background:var(--reddk);border-radius:14px;padding:12px 22px;text-align:center;min-width:210px}
+.timer small{display:block;font-size:13px;font-weight:600}
+.timer b{font-size:36px;font-variant-numeric:tabular-nums}
+.banner.ok .timer{display:none}
+.grid{display:grid;grid-template-columns:1fr 400px;gap:22px}
+.vcol{display:flex;flex-direction:column;gap:16px;min-width:0}
+.pgraph{flex:1;display:flex;flex-direction:column;min-height:170px;padding:14px 20px 16px}
+.pgraph .head{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}.pgraph h3{margin:0;font-size:16px}
+.pgraph .now{margin-left:auto;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.pgraph .sus{display:none;background:#b3261e;color:#fff;border-radius:999px;padding:3px 10px;font-weight:800;font-size:12px;letter-spacing:.02em}
+.pgraph.suspect{box-shadow:0 0 0 3px #b3261e inset}
+.pgraph .plot{flex:1;position:relative;min-height:110px}
+.pgraph canvas{position:absolute;inset:0;width:100%;height:100%}
+.pgraph .na{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:var(--muted);font-size:14px;background:#f7f8f5;border-radius:12px}
+.card{background:var(--card);border-radius:20px;padding:20px}
+.card h3{margin:0 0 14px;font-size:20px}
+.video{background:#1f2a28;border-radius:22px;position:relative;overflow:hidden;aspect-ratio:16/9;display:grid;place-items:center}
+.video img{width:100%;height:100%;object-fit:contain;display:block}
+.chip{position:absolute;top:14px;background:rgba(0,0,0,.65);color:#fff;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:700}
+.chip.live{left:14px}.chip.live i{display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff4d3d;margin-right:6px}
+.chip.time{right:14px}
+.chip.tag{left:50%;bottom:14px;transform:translateX(-50%);background:#f2b53a;color:#3b2a00;display:none}
+.vmsg{position:absolute;color:#aab7b2;font-size:15px;text-align:center;padding:20px}
+.btn{width:100%;border-radius:12px;padding:15px;font-size:19px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:10px;border:2px solid #cfd5d1;background:#fff;color:var(--ink);margin-bottom:12px;text-decoration:none}
+.btn.talk.on{background:var(--greenbg);border-color:var(--green)}
+.btn.call{background:var(--red);border-color:var(--red);color:#fff}
+.btn svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.disp{background:#f3f4f1;border-radius:12px;padding:12px 14px;font-size:14px}
+.disp small{display:block;color:var(--muted);font-weight:600;margin-bottom:2px}
+.disp b{font-size:16px}
+.resp{display:flex;align-items:center;gap:12px;padding:9px 0}
+.av{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-weight:700;background:var(--greenbg);color:var(--green)}
+.av.b{background:#fbeccd;color:#8a5a00}.av.c{background:#e5e8f5;color:#3b4a8a}
+.resp .n{font-weight:600}.resp .st{margin-left:auto;font-size:13px;color:var(--muted)}.resp .st.go{color:var(--green);font-weight:700}
+.row2{display:grid;grid-template-columns:1fr 400px;gap:22px;margin-top:22px}
+.upd{display:flex;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--line);font-size:15px}
+.upd:first-of-type{border-top:0}
+.upd .w{width:70px;color:var(--muted);font-size:14px;flex-shrink:0}
+.dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;background:#7a8984}
+.dot.red{background:var(--red)}.dot.amber{background:var(--amber)}
+.upd .x{font-weight:600}
+.head{display:flex;justify-content:space-between;align-items:center}
+.livechip{font-size:13px;color:var(--muted)}.livechip:before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--red);margin-right:6px}
+.notice{background:var(--amberbg);border:2px solid var(--amberln);border-radius:20px;padding:20px;display:flex;flex-direction:column;min-height:240px}
+.notice .k{font-size:13px;font-weight:700;color:#8a5a00;letter-spacing:.05em;text-transform:uppercase}
+.notice h4{margin:6px 0 10px;font-size:21px;line-height:1.25}
+.notice p{margin:0;color:#4a3d1c;font-size:15px;line-height:1.45}
+.notice a{margin-top:auto;font-weight:700;color:#7a4c00;cursor:pointer;text-decoration:none}
+.ai{margin:14px 0 4px;padding:12px 14px;background:#fff;border:1px solid var(--amberln);border-radius:14px}
+.ai-head{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:6px}
+.ai-tag{border-radius:999px;padding:2px 9px;font-weight:800;font-size:11px;letter-spacing:.04em;color:#fff;background:var(--muted)}
+.ai-tag.urgent{background:var(--red)}.ai-tag.high{background:#c2410c}.ai-tag.medium{background:var(--amber)}.ai-tag.low{background:var(--green)}
+.ai p{margin:0 0 6px;color:var(--ink);font-size:14px}
+.ai .ai-do{font-weight:600}
+.ai ol{margin:6px 0 0;padding-left:18px;color:var(--muted);font-size:12px}
+.ai small{display:block;color:var(--muted);font-size:11px;margin-top:6px}
+.ff{align-self:flex-start;margin:10px 0 12px;border:1px solid var(--amberln);background:#fff;color:#7a4c00;border-radius:10px;padding:6px 12px;font-weight:700;font-size:13px;cursor:pointer}
+.ff.on{background:#7a4c00;color:#fff;border-color:#7a4c00}
+.demobar{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 18px}.demobar .ff{margin:0}
+.shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}
+.shot{background:#f3f4f1;border-radius:14px;overflow:hidden;font-size:13px}
+.shot img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}
+.shot div{padding:8px 10px}
+.view{display:none}.view.show{display:block}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:10px;border-top:1px solid var(--line)}th{color:var(--muted);border-top:0}
+td img{width:90px;border-radius:8px;display:block}
+.form label{display:block;font-weight:600;margin:12px 0 4px}
+.form input{width:100%;padding:10px;border:1px solid #cfd5d1;border-radius:10px;font:inherit}
+.form button{margin-top:14px;padding:10px 18px;border:0;border-radius:10px;background:var(--green);color:#fff;font-weight:700}
+@media(max-width:1000px){.grid,.row2{grid-template-columns:1fr}aside{display:none}}
+</style>
+</head>
+<body>
+<aside>
+  <div class="brand"><div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/></svg></div><span id="appName">Within Reach</span></div>
+  <nav class="nav">
+    <a data-v="dash" class="active"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard<span class="badge" id="navBadge">1</span></a>
+    <a data-v="cam"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10l6-3v10l-6-3z"/></svg>Live camera</a>
+    <a data-v="inc"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17.5v.01"/></svg>Incidents</a>
+    <a data-v="fam"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-4 3-6 6.5-6s6 2 6.5 6"/><path d="M16 4.5a3.5 3.5 0 010 7M18 14c2.2.6 3.4 2.6 3.5 6"/></svg>Family</a>
+    <a data-v="set"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Settings</a>
+  </nav>
+</aside>
+
+<main>
+  <div class="banner ok" id="banner">
+    <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17.5v.01"/></svg></div>
+    <div class="t">
+      <div class="k" id="bKicker">All clear</div>
+      <h1 id="bTitle">Monitoring</h1>
+      <div class="s" id="bSub"></div>
+    </div>
+    <div class="timer"><small>Automatic 911 call in</small><b id="count">1:00</b></div>
+  </div>
+
+  <section class="view show" id="v-dash">
+    <div class="grid">
+      <div class="vcol">
+      <div class="video">
+        <span class="chip live"><i></i>LIVE</span><span class="chip time" id="clock">--:--:--</span>
+        <img id="cam" alt="Live camera">
+        <div class="vmsg" id="vmsg">Waiting for video from main.py...</div>
+        <span class="chip tag" id="vtag"></span>
+      </div>
+      <div class="card pgraph">
+        <div class="head"><h3>Phone motion (Phyphox)</h3><span class="sus" id="pgSus"></span><span class="now" id="pgNow"></span></div>
+        <div class="plot"><canvas id="pgCanvas"></canvas><div class="na" id="pgNa">Phone graph unavailable</div></div>
+      </div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:22px">
+          <h3 id="checkTitle">Check on person</h3>
+          <button class="btn talk" id="talk"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg><span>Hold to talk</span></button>
+          <a class="btn call" id="call911" href="tel:911"><svg viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z"/></svg>Call 911</a>
+          <div class="disp"><small>Tell the dispatcher</small><b id="dispText"></b></div>
+        </div>
+        <div class="card">
+          <h3>Who's responding</h3>
+          <div id="resp"></div>
+        </div>
+      </div>
+    </div>
+    <div class="demobar">
+      <button class="ff" id="graphBtn">&#128200; Show Graph (For Demo)</button>
+      <button class="ff" id="skelBtn">&#129485; Show Skeleton (For Demo)</button>
+    </div>
+    <div class="row2">
+      <div class="card">
+        <div class="head"><h3>Live updates</h3><span class="livechip">Live</span></div>
+        <div id="updates"></div>
+      </div>
+      <div class="notice">
+        <div class="k">What we noticed so far</div>
+        <h4 id="nTitle">No fall detected</h4>
+        <p id="nBody">The camera is watching. You will be alerted here if a fall is detected.</p>
+        <div class="ai" id="aiBox" style="display:none">
+          <div class="ai-head"><span class="ai-tag" id="aiUrg"></span><span id="aiWhen"></span></div>
+          <p id="aiDesc"></p>
+          <p class="ai-do">What to do: <span id="aiDo"></span></p>
+          <ol id="aiHist"></ol>
+          <small>Gemini analysis &middot; automated guidance. If in doubt, call 911.</small>
+        </div>
+        <button class="ff" id="ffBtn" style="display:none">&#9193; Fast Forward (For Demo)</button>
+        <a data-v="inc" id="nLink">See the fall analysis &rarr;</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="view" id="v-cam"><div class="card"><h3 id="camTitle">Live camera</h3><div class="video"><img id="cam2" alt="Live camera"></div></div></section>
+
+  <section class="view" id="v-inc">
+    <div class="card"><h3>Incidents</h3>
+      <table><thead><tr><th>Photo</th><th>Time</th><th>Type</th><th>Status</th></tr></thead><tbody id="incBody"></tbody></table>
+      <p id="incEmpty" style="color:var(--muted)">No incidents yet.</p>
+    </div>
+    <div class="card" style="margin-top:22px"><h3>Saved moments</h3><div class="shots" id="shots"></div></div>
+  </section>
+
+  <section class="view" id="v-fam"><div class="card"><h3>Family</h3><div id="famList"></div></div></section>
+
+  <section class="view" id="v-set"><div class="card form"><h3>Settings</h3>
+    <label>App name</label><input id="sApp">
+    <label>Person being monitored</label><input id="sName">
+    <label>Room</label><input id="sRoom">
+    <label>Home address</label><input id="sAddr">
+    <label>Family member B</label><input id="sB">
+    <label>Family member C</label><input id="sC">
+    <label>Auto-call countdown (seconds)</label><input id="sSecs" type="number" min="10" max="300">
+    <button id="save">Save</button>
+  </div></section>
+</main>
+
+<script>
+(function(){
+  var D = {app:"Within Reach", name:"Alex", room:"Living room", addr:"123 Main St", b:"Family member B", c:"Family member C", secs:60};
+  try{ var s = JSON.parse(localStorage.getItem("fd-settings")||"{}"); for(var k in s) D[k]=s[k]; }catch(e){}
+  if(D.app === "Fall Guard") D.app = "Within Reach";  // old name, saved in Settings before the rename
+  function $(id){return document.getElementById(id);}
+  var alertSince = null, lastData = {events:[], alert:false}, logExtra = [], talk = false, seen = {};
+
+  function fmtTime(t){return new Date(t*1000).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});}
+  function ago(sec){ sec=Math.max(0,Math.round(sec)); if(sec<60) return sec+"s ago"; var m=Math.floor(sec/60); return m+":"+("0"+(sec%60)).slice(-2)+" ago"; }
+  function kindLabel(k){ return k==="prolonged_lying" ? "Prolonged lying" : "Fall"; }
+
+  function applySettings(){
+    $("appName").textContent = D.app;
+    $("checkTitle").textContent = "Check on " + D.name;
+    $("dispText").textContent = D.name + " \u00B7 " + D.addr;
+    $("camTitle").textContent = "Live camera \u00B7 " + D.room;
+    $("sApp").value=D.app; $("sName").value=D.name; $("sRoom").value=D.room; $("sAddr").value=D.addr;
+    $("sB").value=D.b; $("sC").value=D.c; $("sSecs").value=D.secs;
+    $("resp").innerHTML =
+      '<div class="resp"><div class="av">A</div><span class="n">You</span><span class="st go">Watching</span></div>'+
+      '<div class="resp"><div class="av b">B</div><span class="n">'+D.b+'</span><span class="st">'+(lastData.alert?"Alert not opened":"Notified when needed")+'</span></div>'+
+      '<div class="resp"><div class="av c">C</div><span class="n">'+D.c+'</span><span class="st">'+(lastData.alert?"Alert not opened":"Notified when needed")+'</span></div>';
+    $("famList").innerHTML = $("resp").innerHTML;
+  }
+  $("save").onclick = function(){
+    D.app=$("sApp").value; D.name=$("sName").value; D.room=$("sRoom").value; D.addr=$("sAddr").value;
+    D.b=$("sB").value; D.c=$("sC").value; D.secs=parseInt($("sSecs").value)||60;
+    localStorage.setItem("fd-settings", JSON.stringify(D)); applySettings();
+  };
+
+  document.querySelectorAll("[data-v]").forEach(function(a){
+    a.onclick = function(){
+      var v = a.getAttribute("data-v");
+      document.querySelectorAll(".view").forEach(function(x){x.classList.remove("show");});
+      $("v-"+v).classList.add("show");
+      document.querySelectorAll(".nav a").forEach(function(x){x.classList.toggle("active", x.getAttribute("data-v")===v);});
+    };
+  });
+
+  $("talk").onmousedown = $("talk").ontouchstart = function(){ talk=true; $("talk").classList.add("on"); $("talk").lastChild.textContent="Talking..."; logExtra.unshift({t:Date.now()/1000, text:"You started talking to "+D.name, c:""}); };
+  $("talk").onmouseup = $("talk").onmouseleave = $("talk").ontouchend = function(){ if(talk){ talk=false; $("talk").classList.remove("on"); $("talk").lastChild.textContent="Hold to talk"; } };
+
+  function startVideo(){
+    ["cam","cam2"].forEach(function(id){
+      var img=$(id); img.onload=function(){ $("vmsg").style.display="none"; };
+      img.onerror=function(){ $("vmsg").style.display="block"; $("vmsg").textContent="Waiting for video from main.py..."; setTimeout(function(){ img.src="/video?"+Date.now(); }, 2000); };
+      img.src="/video";
+    });
+  }
+
+  function render(d){
+    lastData = d;
+    var ev = d.events || [];
+    var latest = ev.length ? ev[ev.length-1] : null;
+    var on = !!d.alert;
+    var banner = $("banner");
+    banner.classList.toggle("ok", !on);
+    $("navBadge").style.display = on ? "grid" : "none";
+    $("vtag").style.display = on && latest ? "block" : "none";
+    if(on && latest) $("vtag").textContent = kindLabel(latest.kind)+" \u00B7 "+fmtTime(latest.t);
+
+    if(on){
+      if(alertSince===null) alertSince = Date.now();
+      $("bKicker").textContent = (d.alert_text || "Fall detected") + (latest ? " \u00B7 " + ago(d.now - latest.t).toUpperCase() : "");
+      $("bTitle").textContent = D.name + " may have fallen and isn't responding";
+      $("bSub").textContent = D.room + " \u00B7 " + D.addr;
+    } else {
+      alertSince = null;
+      $("bKicker").textContent = "All clear";
+      $("bTitle").textContent = D.name + " is being monitored";
+      $("bSub").textContent = D.room + " \u00B7 No fall detected right now";
+    }
+
+    var rows = [];
+    if(on) rows.push({t:d.now, text:"No movement since the fall", c:"amber"});
+    ev.slice().reverse().slice(0,6).forEach(function(e){
+      rows.push({t:e.t, text:kindLabel(e.kind)+" detected in the "+D.room.toLowerCase(), c:"red"});
+      rows.push({t:e.t+1, text:"Alert sent to you, "+D.b+" and "+D.c, c:""});
+    });
+    logExtra.slice(0,3).forEach(function(x){rows.push(x);});
+    rows.sort(function(a,b){return b.t-a.t;});
+    $("updates").innerHTML = rows.length ? rows.slice(0,8).map(function(r,i){
+      return '<div class="upd"><span class="w">'+(i===0&&Date.now()/1000-r.t<30?"Now":fmtTime(r.t))+'</span><span class="dot '+r.c+'"></span><span class="x">'+r.text+'</span></div>';
+    }).join("") : '<div class="upd"><span class="w">Now</span><span class="dot"></span><span class="x">Camera is watching</span></div>';
+
+    if(latest && on){
+      $("nTitle").textContent = latest.kind==="prolonged_lying" ? "Lying on the floor for a long time" : "Fall confirmed \u2014 stayed down";
+      $("nBody").textContent = "No movement since the fall. If they don't respond to your voice, call 911.";
+    } else if(latest){
+      $("nTitle").textContent = "Last event: "+kindLabel(latest.kind)+" at "+fmtTime(latest.t);
+      $("nBody").textContent = "The person is no longer on the floor. Review the saved moment under Incidents.";
+    } else {
+      $("nTitle").textContent = "No fall detected";
+      $("nBody").textContent = "The camera is watching. You will be alerted here if a fall is detected.";
+    }
+
+    var list = ev.slice().reverse();
+    $("incEmpty").style.display = list.length ? "none" : "block";
+    $("incBody").innerHTML = list.map(function(e){
+      return '<tr><td><a href="'+e.url+'" target="_blank"><img src="'+e.url+'"></a></td><td>'+new Date(e.t*1000).toLocaleString()+'</td><td>'+kindLabel(e.kind)+'</td><td>'+(on&&e===latest?"Open":"Logged")+'</td></tr>';
+    }).join("");
+    $("shots").innerHTML = list.length ? list.map(function(e){
+      return '<div class="shot"><a href="'+e.url+'" target="_blank"><img src="'+e.url+'"></a><div><b>'+kindLabel(e.kind)+'</b><br>'+new Date(e.t*1000).toLocaleString()+'</div></div>';
+    }).join("") : '<span style="color:var(--muted)">No saved images yet.</span>';
+    applySettings();
+  }
+
+  function poll(){
+    fetch("/events.json",{cache:"no-store"}).then(function(r){return r.json();}).then(render).catch(function(){});
+    fetch("/incidents.json",{cache:"no-store"}).then(function(r){return r.json();}).then(renderAI).catch(function(){});
+  }
+
+  // Gemini analysis of the newest incident, in the "What we noticed so far" box.
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+  function words(s){ return String(s||"").replace(/_/g," "); }
+  function renderAI(j){
+    var inc = (j.incidents || []).slice(-1)[0], reps = inc ? (inc.reports || []) : [];
+    var r = reps[reps.length-1];
+    $("aiBox").style.display = r ? "block" : "none";
+    if(!r) return;
+    $("aiUrg").textContent = r.urgency.toUpperCase();
+    $("aiUrg").className = "ai-tag " + r.urgency;
+    $("aiWhen").textContent = (r.minutes < 0.5 ? "When the fall was confirmed" : Math.round(r.minutes) + " min after the fall")
+      + " \u00B7 " + words(r.position) + ", " + words(r.movement);
+    $("aiDesc").textContent = r.description;
+    $("aiDo").textContent = r.guidance;
+    $("aiHist").innerHTML = reps.slice(-5, -1).reverse().map(function(x){
+      return "<li>" + Math.round(x.minutes) + " min: " + esc(words(x.position)) + ", " + esc(words(x.movement)) + "</li>";
+    }).join("");
+  }
+
+  // Demo: Fast Forward makes the per-minute Gemini checks come every 2 s.
+  function showFast(fast){
+    $("ffBtn").style.display = "inline-block";
+    $("ffBtn").classList.toggle("on", fast);
+    $("ffBtn").innerHTML = fast ? "&#9208; Normal speed" : "&#9193; Fast Forward (For Demo)";
+  }
+  fetch("/api/demo/speed",{cache:"no-store"}).then(function(r){return r.json();}).then(function(d){ showFast(d.fast); }).catch(function(){});
+  $("ffBtn").onclick = function(){
+    var fast = !$("ffBtn").classList.contains("on");
+    fetch("/api/demo/speed?fast=" + (fast ? 1 : 0), {method:"POST"})
+      .then(function(r){return r.json();}).then(function(d){ showFast(d.fast); }).catch(function(){});
+  };
+
+  // Demo overlays on the live video (phone motion graph, tracked skeleton). One shared
+  // setting on the camera PC, the same as the switches on the monitor's phone page.
+  function showDemo(d){
+    $("graphBtn").classList.toggle("on", !!d.graph);
+    $("graphBtn").innerHTML = d.graph ? "&#128200; Hide Graph" : "&#128200; Show Graph (For Demo)";
+    $("skelBtn").classList.toggle("on", !!d.skeleton);
+    $("skelBtn").innerHTML = d.skeleton ? "&#129485; Hide Skeleton" : "&#129485; Show Skeleton (For Demo)";
+  }
+  function loadDemo(){ fetch("/api/demo",{cache:"no-store"}).then(function(r){return r.json();}).then(showDemo).catch(function(){}); }
+  function toggleDemo(key, btn){
+    fetch("/api/demo?" + key + "=" + (btn.classList.contains("on") ? 0 : 1), {method:"POST"})
+      .then(function(r){return r.json();}).then(showDemo).catch(loadDemo);
+  }
+  $("graphBtn").onclick = function(){ toggleDemo("graph", this); };
+  $("skelBtn").onclick = function(){ toggleDemo("skeleton", this); };
+  loadDemo(); setInterval(loadDemo, 5000);  // the phone page may switch them too
+
+  // Phone acceleration (Phyphox) under the live video: the last 10 s, the impact
+  // threshold dashed, detected impacts in red. Says "unavailable" when there is no data.
+  function phoneNa(text){
+    $("pgNa").textContent = text; $("pgNa").style.display = "grid"; $("pgNow").textContent = ""; showSuspect(null);
+  }
+  // A shock to the phone: "Fall suspected" for a few seconds (the camera confirms or not).
+  function showSuspect(s){
+    $("pgSus").style.display = s ? "inline-block" : "none";
+    $("pgSus").textContent = s ? "\u26A0 Fall suspected \u00B7 phone shock " + s.g + " g" : "";
+    $("pgSus").closest(".pgraph").classList.toggle("suspect", !!s);
+  }
+  function drawPhone(d){
+    if(!d || !d.available){ phoneNa("Phone graph unavailable" + (d && d.reason ? " · " + d.reason : "")); return; }
+    if(!d.samples.length){ phoneNa("Phone graph unavailable · waiting for data from the phone"); return; }
+    $("pgNa").style.display = "none";
+    $("pgNow").textContent = (d.accel / 9.81).toFixed(2) + " g now";
+    showSuspect(d.suspect);
+    var c = $("pgCanvas"), dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+    if(c.width !== Math.round(w*dpr) || c.height !== Math.round(h*dpr)){ c.width = Math.round(w*dpr); c.height = Math.round(h*dpr); }
+    var g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+    var L = 34, B = h - 16, T = 6, ymax = Math.max(1.5 * d.threshold, 1);
+    d.samples.concat(d.impacts).forEach(function(p){ if(p[1] > ymax) ymax = p[1]; });
+    function X(age){ return L + (1 - age / d.seconds) * (w - L); }
+    function Y(a){ return B - Math.min(a, ymax) / ymax * (B - T); }
+    g.font = "11px DM Sans, system-ui, sans-serif"; g.fillStyle = "#5d6b66"; g.strokeStyle = "#e7e9e4"; g.lineWidth = 1;
+    for(var gv = 0; gv <= ymax / 9.81; gv += ymax > 40 ? 2 : 1){  // gridlines every 1 g (2 g when tall)
+      var gy = Math.round(Y(gv * 9.81)) + .5;
+      g.beginPath(); g.moveTo(L, gy); g.lineTo(w, gy); g.stroke(); g.fillText(gv + " g", 0, gy + 4);
+    }
+    g.fillText("-" + d.seconds + " s", L, h - 2); g.fillText("now", w - 22, h - 2);
+    g.setLineDash([5, 5]); g.strokeStyle = "#c27a0e"; g.beginPath();
+    g.moveTo(L, Y(d.threshold)); g.lineTo(w, Y(d.threshold)); g.stroke(); g.setLineDash([]);
+    g.strokeStyle = "#14532d"; g.lineWidth = 2; g.lineJoin = "round"; g.beginPath();
+    d.samples.forEach(function(p, i){ var x = X(p[0]), y = Y(p[1]); if(i) g.lineTo(x, y); else g.moveTo(x, y); });
+    g.stroke();
+    g.fillStyle = "#b42318";
+    d.impacts.forEach(function(p){ g.beginPath(); g.arc(X(p[0]), Y(p[1]), 5, 0, 2*Math.PI); g.fill(); });
+  }
+  var phoneBusy = false;
+  function pollPhone(){
+    if(phoneBusy) return; phoneBusy = true;
+    fetch("/api/phone",{cache:"no-store"}).then(function(r){return r.json();}).then(drawPhone)
+      .catch(function(){ phoneNa("Phone graph unavailable · no connection to main.py"); })
+      .then(function(){ phoneBusy = false; });
+  }
+  pollPhone(); setInterval(pollPhone, 250);
+
+  setInterval(function(){
+    $("clock").textContent = new Date().toLocaleTimeString([], {hour:"numeric", minute:"2-digit", second:"2-digit"});
+    if(alertSince!==null){
+      var left = Math.max(0, D.secs - (Date.now()-alertSince)/1000);
+      $("count").textContent = Math.floor(left/60)+":"+("0"+Math.floor(left%60)).slice(-2);
+    }
+  }, 500);
+
+  applySettings(); startVideo(); poll(); setInterval(poll, 1500);
+})();
+</script>
+</body>
+</html>
