@@ -68,6 +68,7 @@ class Config:
     imu_timeout_s: float = 2.0  # HTTP timeout per request
     imu_impact_ms2: float = 20.0  # departure from rest counted as an impact (~2 g)
     imu_refractory_s: float = 1.0  # one impact per bounce sequence
+    imu_suspect_s: float = 10.0  # show "Fall suspected" this long after a phone shock
     imu_match_s: float = 2.0  # impact this close to the camera's fall counts as the same fall
     imu_hold_s: float = 10.0  # an unmatched impact is forgotten after this long
     imu_still_ms2: float = 1.5  # phone below this is "still"

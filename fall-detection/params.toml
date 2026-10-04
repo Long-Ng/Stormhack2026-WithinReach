@@ -65,6 +65,7 @@ imu_poll_s = 0.05
 imu_timeout_s = 2.0
 imu_impact_ms2 = 20.0     # m/s^2 above rest (~2 g); a hard fall is usually higher
 imu_refractory_s = 1.0    # ignore further spikes this long after an impact
+imu_suspect_s = 10.0      # screens show "Fall suspected" this long after a phone shock
 imu_match_s = 2.0         # impact within this of the camera's fall -> confirm immediately
 imu_hold_s = 10.0         # forget an unmatched impact after this long
 imu_still_ms2 = 1.5       # phone below this counts as still
