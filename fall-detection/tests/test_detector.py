@@ -159,3 +159,25 @@ def test_ankles_hidden_wide_but_upright_torso_is_not_down():
     det = FallDetector(Config())
     assert not det.is_down(feats(0.0, **DESK))
     assert det.is_down(feats(0.0, **(DESK | {"angle": 80.0})))
+
+
+# Screenshot case: lying diagonally toward a ceiling camera, perfectly still, yet
+# torso only ~32 deg from vertical, bbox taller than wide, hip high in the image.
+DIAGONAL = dict(angle=31.8, peak=0.03, aspect=0.81, hip_h=1.25, motion=0.06)
+
+
+def test_still_on_ground_at_a_diagonal_is_confirmed():
+    det, events = run([(1, STAND), (0.3, DROP), (0.3, LYING), (4, DIAGONAL)])
+    assert [e.kind for e in events] == ["fall"]
+
+
+def test_diagonal_alone_does_not_enter_on_ground():
+    # Holding needs a real "down" first; a standing-ish diagonal pose never starts a fall.
+    det, events = run([(1, STAND), (0.3, DROP | {"angle": 35.0, "aspect": 0.8, "hip_h": 1.3}),
+                       (5, DIAGONAL)])
+    assert events == []
+
+
+def test_getting_up_still_recovers():
+    det, events = run([(1, STAND), (0.3, DROP), (1, LYING), (2, STAND)])
+    assert events == [] and det.state is State.UPRIGHT
