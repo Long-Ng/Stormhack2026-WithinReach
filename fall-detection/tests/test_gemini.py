@@ -1,0 +1,390 @@
+import json
+import threading
+
+import numpy as np
+
+from alerts import HELP, OK, AlertManager
+from config import Config
+from events import FallEvent
+from gemini import (HIGH, LOW, MEDIUM, URGENT, FallAnalyst, FallReport, FrameHistory,
+                    GeminiClient, guidance, report_dict)
+
+
+def report(**kw):
+    base = dict(is_fall=True, fall_type="backward", position="on_back", movement="small_movements",
+                head_struck_likely="no", description="She fell backwards and is lying on her back.")
+    return FallReport(**base | kw)
+
+
+# --- guidance table ---------------------------------------------------------------------
+def test_collapse_is_urgent():
+    level, text = guidance(report(fall_type="collapse"), 0)
+    assert level == URGENT and "Call 911 now" in text
+
+
+def test_still_for_five_minutes_is_urgent():
+    assert guidance(report(movement="still"), still_minutes=2)[0] == MEDIUM
+    level, text = guidance(report(movement="still"), still_minutes=5)
+    assert level == URGENT and "5+ minutes" in text
+
+
+def test_head_strike_and_sideways_are_high_and_most_urgent_comes_first():
+    level, text = guidance(report(fall_type="sideways", head_struck_likely="yes"), 0)
+    assert level == HIGH and text.startswith("Their head may have hit")
+
+
+def test_up_or_not_a_fall_is_low():
+    assert guidance(report(movement="up_and_moving", position="standing"), 0)[0] == LOW
+    up_after_head_strike = report(movement="up_and_moving", head_struck_likely="yes")
+    assert guidance(up_after_head_strike, 0)[0] == HIGH  # a head strike still matters
+    assert guidance(report(is_fall=False, fall_type="not_a_fall", position="not_visible"), 0)[0] == LOW
+
+
+def test_not_a_fall_but_on_the_floor_is_never_low():
+    on_floor = report(is_fall=False, fall_type="not_a_fall", position="on_back", movement="still")
+    assert guidance(on_floor, 0)[0] == MEDIUM
+    assert guidance(on_floor, still_minutes=5)[0] == URGENT  # still not moving 5 minutes later
+
+
+def test_emergency_number_is_configurable():
+    assert "Call 112 now" in guidance(report(fall_type="collapse"), emergency="112")[1]
+
+
+# --- parsing and the request ---------------------------------------------------------------
+def test_unknown_values_fall_back_to_the_unknown_category():
+    r = FallReport.from_json({"is_fall": True, "fall_type": "Cartwheel", "position": "ON_BACK",
+                              "movement": "", "head_struck_likely": "maybe", "description": " x "})
+    assert (r.fall_type, r.position, r.movement, r.head_struck_likely, r.description) == \
+        ("unclear", "on_back", "not_visible", "unclear", "x")
+
+
+def test_request_has_prompt_timed_images_and_schema():
+    frame = np.zeros((720, 1280, 3), np.uint8)
+    body = GeminiClient("k", "m").request_body("look", [(-2.0, frame), (0.0, frame)])
+    parts = body["contents"][0]["parts"]
+    assert parts[0] == {"text": "look"}
+    assert [p["text"] for p in parts[1::2]] == ["t = -2.0 s", "t = +0.0 s"]
+    assert all(p["inline_data"]["mime_type"] == "image/jpeg" for p in parts[2::2])
+    assert body["generationConfig"]["response_mime_type"] == "application/json"
+    assert "fall_type" in body["generationConfig"]["response_schema"]["required"]
+
+
+def test_frame_history_keeps_recent_frames_spread_evenly():
+    h = FrameHistory(keep_s=12.0, every_s=0.5)
+    for i in range(100):  # 10 s at 10 fps -> one kept every 0.5 s
+        h.add(np.full((48, 64, 3), i, np.uint8), i / 10)
+    frames = h.recent(n=5, span_s=4.0, ref_t=9.5)  # last kept frame is at 9.5 s
+    assert len(frames) == 5
+    assert [round(t, 1) for t, _ in frames] == [-4.0, -3.0, -2.0, -1.0, 0.0]
+
+
+# --- schedule ----------------------------------------------------------------------------
+class FakeClient:
+    def __init__(self):
+        self.calls = []
+        self.done = threading.Semaphore(0)
+
+    def analyze(self, frames, minutes=None):
+        self.calls.append(minutes)
+        return report(movement="still")
+
+
+def analyst(is_open=lambda _id: True):
+    client, got = FakeClient(), []
+
+    def on_report(inc_id, r, minutes, still):
+        got.append((inc_id, minutes))
+        client.done.release()
+    a = FallAnalyst(client, on_report, is_open=is_open, update_s=300.0, max_updates=2)
+    h = FrameHistory()
+    for i in range(20):
+        h.add(np.zeros((48, 64, 3), np.uint8), 100 + i / 2)
+    return a, h, client, got
+
+
+def test_first_look_then_updates_every_interval_until_the_cap():
+    a, h, client, got = analyst()
+    a.start("inc1", h, 110.0)
+    for t in (200.0, 410.0, 720.0, 1100.0):
+        a.tick(h, t)
+    for _ in range(3):
+        assert client.done.acquire(timeout=5)
+    assert [(i, round(m)) for i, m in got] == [("inc1", 0), ("inc1", 5), ("inc1", 10)]
+    assert a.watches == {}  # capped at max_updates
+
+
+def test_updates_stop_when_answered_ok_or_back_up():
+    open_ = {"inc1": True}
+    a, h, client, got = analyst(is_open=lambda i: open_[i])
+    a.start("inc1", h, 110.0)
+    open_["inc1"] = False
+    a.tick(h, 500.0)
+    assert a.watches == {}
+    a.start("inc1", h, 110.0)
+    a.stop()
+    assert a.watches == {}
+
+
+# --- alerts hook ---------------------------------------------------------------------------
+def test_reports_reach_the_monitor_once_alerted():
+    cfg = Config(ntfy_person_topic="person-x", ntfy_monitor_topic="monitor-x")
+    sent = []
+    m = AlertManager(cfg, "http://pc:5000", sent.append, clock=lambda: 1_700_000_000.0)
+    m.send(FallEvent(timestamp=1_700_000_000.0, kind="fall", peak_hip_vel=3, torso_angle=90,
+                     snapshot_path=None, stream_t=1))
+    inc_id = m.last_incident_id
+    m.add_report(inc_id, report_dict(report(fall_type="collapse"), 0.0))
+    assert len(sent) == 1  # monitor not alerted yet: stored only
+    m.respond(inc_id, HELP)
+    assert "fainted" in sent[-1]["message"] and "Automated guidance" in sent[-1]["message"]
+    sent_t = m.incidents[inc_id].sent_report["t"]
+    m.add_report(inc_id, report_dict(report(movement="still"), 5.0, still_minutes=5.0)
+                 | {"t": sent_t + 300})
+    assert sent[-1]["title"].startswith("Update, 5 min") and sent[-1]["priority"] == 5
+    assert json.loads(json.dumps(m.incidents[inc_id].reports))  # served in /incidents.json
+    m.respond(inc_id, OK)
+    assert not m.is_open(inc_id)
+
+
+def test_overloaded_model_is_retried_then_falls_back(monkeypatch):
+    import urllib.error
+    calls = []
+
+    def fake_call(model, data):
+        calls.append(model)
+        if model == "main":
+            raise urllib.error.HTTPError("u", 503, "high demand", {}, None)
+        return vars(report())  # raw JSON, parsed by the caller
+    c = GeminiClient("k", "main", fallback_models=("lite",), sleep=lambda s: None)
+    monkeypatch.setattr(c, "_call", fake_call)
+    assert c.analyze([]).fall_type == "backward"
+    assert calls == ["main", "main", "main", "lite"]
+
+
+def test_bad_key_is_not_retried(monkeypatch):
+    import urllib.error
+    import pytest
+    c = GeminiClient("k", "main", fallback_models=("lite",), sleep=lambda s: None)
+    calls = []
+
+    def fake_call(model, data):
+        calls.append(model)
+        raise urllib.error.HTTPError("u", 403, "forbidden", {}, None)
+    monkeypatch.setattr(c, "_call", fake_call)
+    with pytest.raises(urllib.error.HTTPError):
+        c.analyze([])
+    assert calls == ["main"]
+
+
+# --- video first look, images as fallback ----------------------------------------------
+def history_10fps(seconds=12.0):
+    h = FrameHistory()
+    for i in range(int(seconds * 10)):
+        h.add(np.full((360, 640, 3), (i * 3) % 256, np.uint8), 100 + i / 10)
+    return h
+
+
+def test_clip_encodes_to_a_playable_mp4(tmp_path):
+    import cv2
+    from gemini import VIDEO_S, encode_mp4
+    clip = history_10fps().span(VIDEO_S)
+    mp4, fps = encode_mp4(clip)
+    assert 9.5 <= fps <= 10.5 and len(clip) in (60, 61)
+    (tmp_path / "c.mp4").write_bytes(mp4)
+    cap = cv2.VideoCapture(str(tmp_path / "c.mp4"))
+    assert cap.get(cv2.CAP_PROP_FRAME_WIDTH) == 512 and cap.read()[0]
+
+
+def test_video_request_has_the_clip_and_its_frame_rate():
+    body = GeminiClient("k", "m").video_request_body(b"mp4bytes", 10.0, 6.0)
+    text, video = body["contents"][0]["parts"]
+    assert "6 seconds" in text["text"]
+    assert video["inline_data"]["mime_type"] == "video/mp4"
+    assert video["video_metadata"] == {"fps": 10.0}
+
+
+class VideoClient:
+    video_fps = 5.0
+
+    def __init__(self, video_fails):
+        self.video_fails, self.used = video_fails, []
+        self.done = threading.Semaphore(0)
+
+    def analyze_video(self, mp4, fps, seconds):
+        self.used.append("video")
+        if self.video_fails:
+            raise TimeoutError("video too slow")
+        return report(fall_type="forward")
+
+    def analyze(self, frames, minutes=None):
+        self.used.append(f"images:{len(frames)}")
+        return report(fall_type="sideways")
+
+
+def first_report(video_fails):
+    client, got = VideoClient(video_fails), []
+
+    def on_report(inc_id, r, minutes, still):
+        got.append(r)
+        client.done.release()
+    FallAnalyst(client, on_report).start("inc1", history_10fps(), 111.9)
+    assert client.done.acquire(timeout=10)
+    return client.used, got[0]
+
+
+def test_first_look_uses_video():
+    used, r = first_report(video_fails=False)
+    assert used == ["video"] and r.fall_type == "forward"
+
+
+def test_first_look_falls_back_to_eight_images():
+    used, r = first_report(video_fails=True)
+    assert used == ["video", "images:8"] and r.fall_type == "sideways"
+
+
+def test_checks_every_minute_notify_every_five_minutes_or_when_urgent():
+    cfg = Config(ntfy_person_topic="person-x", ntfy_monitor_topic="monitor-x", gemini_notify_s=300.0)
+    sent = []
+    m = AlertManager(cfg, "http://pc:5000", sent.append, clock=lambda: 1_700_000_000.0)
+    m.send(FallEvent(timestamp=1_700_000_000.0, kind="fall", peak_hip_vel=3, torso_angle=90,
+                     snapshot_path=None, stream_t=1))
+    inc_id = m.last_incident_id
+    m.add_report(inc_id, report_dict(report(), 0.0) | {"t": 1_700_000_000.0})  # first look
+    m.respond(inc_id, HELP)                       # monitor alerted, with the first look in it
+    alerted = len(sent)
+
+    still_since = {}
+
+    def check(minute, **kw):
+        r = report(**kw)
+        since = still_since.setdefault("s", minute) if r.movement == "still" else still_since.clear()
+        still = minute - since if r.movement == "still" else 0.0
+        m.add_report(inc_id, report_dict(r, minute, still_minutes=still)
+                     | {"t": 1_700_000_000.0 + minute * 60})
+
+    for minute in (1, 2, 3, 4):                   # changes, but under 5 min: quiet
+        check(minute, movement="trying_to_get_up" if minute % 2 else "small_movements")
+    check(5, movement="small_movements")          # 5 min since the alert: sent
+    check(6, movement="still")                    # still for 0 min: quiet
+    check(9, movement="still")                    # 3 min: quiet
+    check(11, movement="still")                   # still 5 min -> urgent: sent at once
+    check(12, movement="still")                   # still urgent: quiet
+    check(16, movement="still")                   # 5 min since the last one: sent
+    minutes = [s["title"].split(", ")[1].split(" min")[0] for s in sent[alerted:]]
+    assert minutes == ["5", "11", "16"]
+    assert sent[alerted + 1]["priority"] == 5     # the escalation is loud
+    assert len(m.incidents[inc_id].reports) == 11  # every check is still kept
+
+
+def test_urgent_can_wait_for_the_five_minutes_too():
+    cfg = Config(ntfy_person_topic="p", ntfy_monitor_topic="m", gemini_notify_urgent_now=False)
+    sent = []
+    m = AlertManager(cfg, "http://pc:5000", sent.append, clock=lambda: 1_700_000_000.0)
+    m.send(FallEvent(timestamp=1_700_000_000.0, kind="fall", peak_hip_vel=3, torso_angle=90,
+                     snapshot_path=None, stream_t=1))
+    inc_id = m.last_incident_id
+    m.respond(inc_id, HELP)
+    m.add_report(inc_id, report_dict(report(), 1) | {"t": 1_700_000_060.0})
+    n = len(sent)
+    m.add_report(inc_id, report_dict(report(fall_type="collapse"), 2) | {"t": 1_700_000_120.0})
+    assert len(sent) == n
+
+
+def test_still_time_counts_consecutive_still_checks_only():
+    moves = iter(["still", "still", "small_movements", "still", "still", "still"])
+    done, got = threading.Semaphore(0), []
+
+    class Seq:
+        video_fps = 5.0
+
+        def analyze_video(self, *a):
+            return report(movement=next(moves))
+
+        def analyze(self, frames, minutes=None):
+            return report(movement=next(moves))
+
+    def on_report(inc_id, r, minutes, still):
+        got.append((round(minutes), round(still)))
+        done.release()
+    a = FallAnalyst(Seq(), on_report, update_s=60.0, max_updates=60)
+    h = history_10fps()
+    a.start("inc1", h, 111.9)
+    for minute in (1, 2, 3, 4, 5):
+        a.tick(h, 111.9 + minute * 60)
+    for _ in range(6):
+        assert done.acquire(timeout=10)
+    # still at 0 and 1, moved at 2, still again from 3
+    assert got == [(0, 0), (1, 1), (2, 0), (3, 0), (4, 1), (5, 2)]
+
+
+
+# --- rate limits ---------------------------------------------------------------------------
+def http_error(code, body=b""):
+    import io
+    import urllib.error
+    return urllib.error.HTTPError("u", code, "x", {}, io.BytesIO(body))
+
+
+def test_cooldown_comes_from_googles_error_details():
+    from gemini import DAILY_COOLDOWN_S, DEFAULT_COOLDOWN_S, cooldown_s
+    retry = {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "33s"}
+    daily = {"@type": "type.googleapis.com/google.rpc.QuotaFailure", "violations": [
+        {"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}
+    body = lambda *d: json.dumps({"error": {"code": 429, "details": list(d)}}).encode()
+    assert cooldown_s(body(retry)) == 33.0
+    assert cooldown_s(body(retry, daily)) == DAILY_COOLDOWN_S
+    assert cooldown_s(b"not json") == DEFAULT_COOLDOWN_S
+
+
+def test_rate_limited_model_is_skipped_until_its_delay_passes(monkeypatch):
+    now = [0.0]
+    calls = []
+    c = GeminiClient("k", "main", fallback_models=("lite",), sleep=lambda s: None,
+                     clock=lambda: now[0])
+
+    def fake_call(model, data):
+        calls.append(model)
+        if model == "main" and now[0] < 60:
+            raise http_error(429, json.dumps({"error": {"details": [{"retryDelay": "40s"}]}}).encode())
+        return vars(report())
+    monkeypatch.setattr(c, "_call", fake_call)
+    c.analyze([]); c.analyze([])
+    assert calls == ["main", "lite", "lite"]  # no retries on 429; main skipped while limited
+    now[0] = 61.0
+    c.analyze([])
+    assert calls[-1] == "main"                # back once the delay has passed
+
+
+def test_every_model_rate_limited_raises(monkeypatch):
+    import pytest
+    c = GeminiClient("k", "main", fallback_models=("lite",), sleep=lambda s: None, clock=lambda: 0.0)
+    monkeypatch.setattr(c, "_call", lambda m, d: (_ for _ in ()).throw(http_error(429)))
+    with pytest.raises(Exception):
+        c.analyze([])
+    with pytest.raises(RuntimeError, match="rate limited"):
+        c.analyze([])  # both skipped now, nothing even tried
+
+
+def test_video_is_thinned_to_the_configured_fps():
+    from gemini import VIDEO_S, encode_mp4, thin
+    clip = thin(history_10fps().span(VIDEO_S), 5.0)
+    assert len(clip) in (30, 31)
+    assert 4.5 <= encode_mp4(clip)[1] <= 5.5
+
+
+def test_updates_use_the_update_client():
+    first, updates = FakeClient(), FakeClient()
+    done = threading.Semaphore(0)
+    a = FallAnalyst(first, lambda *args: done.release(), update_client=updates, update_s=60.0)
+    first.analyze_video = lambda *args: report()
+    first.video_fps = 5.0
+    h = history_10fps()
+    a.start("inc1", h, 111.9)
+    a.tick(h, 111.9 + 61)
+    assert done.acquire(timeout=10) and done.acquire(timeout=10)
+    assert updates.calls == [pytest_approx_minutes(1)] and first.calls == []
+
+
+def pytest_approx_minutes(m):
+    import pytest
+    return pytest.approx(m, abs=0.05)

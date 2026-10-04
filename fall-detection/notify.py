@@ -51,7 +51,7 @@ class NtfySink:
         self.base = f"http://{lan_ip()}:{port}"
         self.who = who
         self.phone = phone
-        print(f"[notify] ntfy topic '{self.topic}' on {self.server} | phone page {self.base}/phone", flush=True)
+        print(f"[notify] ntfy topic '{self.topic}' on {self.server} | monitor page {self.base}/monitor", flush=True)
 
     def send(self, event) -> None:
         # Network call in a thread so a slow connection never stalls the camera loop.
@@ -64,11 +64,11 @@ class NtfySink:
             title = f"{self.who} không phản hồi — hãy kiểm tra ngay"
         msg = (f"Phát hiện lúc {event.time_str}. Xem camera trực tiếp để biết tình hình, "
                f"sau đó nói chuyện với họ hoặc gọi {self.phone}.")
-        actions = (f"view, Mở camera trực tiếp, {self.base}/phone; "
-                   f"view, Nói chuyện, {self.base}/phone#talk; "
+        actions = (f"view, Mở camera trực tiếp, {self.base}/monitor; "
+                   f"view, Nói chuyện, {self.base}/monitor#talk; "
                    f"view, Gọi {self.phone}, tel:{self.phone}")
         headers = {"Title": _hdr(title), "Priority": "urgent", "Tags": "rotating_light",
-                   "Click": f"{self.base}/phone", "Actions": _hdr(actions)}
+                   "Click": f"{self.base}/monitor", "Actions": _hdr(actions)}
         url = f"{self.server}/{self.topic}"
         snap = Path(event.snapshot_path) if event.snapshot_path else None
         try:

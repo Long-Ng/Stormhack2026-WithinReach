@@ -92,6 +92,11 @@ class ClipRecorder:
         if t - self._down_t >= self.tail_s or t - self._start_t >= self.max_after_s:
             self.stop()
 
+    def clear_preroll(self) -> None:
+        """Forget the buffered pre-fall frames (e.g. when Privacy view is switched on, so
+        the next clip does not start with camera footage from before the switch)."""
+        self._q.put(("clear",))  # blocking: control messages must not be dropped
+
     def stop(self) -> None:
         if self.path is not None:
             self.path = None
@@ -145,6 +150,8 @@ class ClipRecorder:
                     for f in frames:
                         write(f)
                     print(f"[clip] recording {path}", flush=True)
+                elif msg[0] == "clear":
+                    buffer.clear()
                 elif msg[0] in ("stop", "close"):
                     if writer is not None:
                         writer.release()

@@ -12,7 +12,7 @@ MODELS_DIR = Path(__file__).parent / "models"
 DEFAULT_PARAMS = Path(__file__).parent / "params.toml"
 # Private overrides (ntfy topics, phone numbers), gitignored; read after the main file.
 LOCAL_PARAMS = Path(__file__).parent / "params.local.toml"
-PATH_KEYS = {"model_path", "events_dir"}  # relative values resolve against the params file
+PATH_KEYS = {"model_path", "events_dir", "zones_file"}  # relative values resolve against the params file
 
 
 @dataclass
@@ -91,6 +91,40 @@ class Config:
     person_number: str = ""  # "Call person" button on the monitor's phone
     room_name: str = "Living room"
     public_url: str = ""  # address phones use to reach this PC; empty = http://<LAN IP>:<port>
+    mdns_name: str = "within-reach"  # phones can open http://within-reach.local; "" = off
+
+    # Gemini fall analysis: frames of a confirmed fall go to Google. Off without a key.
+    gemini_api_key: str = ""  # put in params.local.toml (gitignored) or env GEMINI_API_KEY
+    gemini_model: str = "gemini-3.8-flash"
+    gemini_fallback_model: str = "gemini-3.5-flash-lite"  # tried when the main one is overloaded
+    gemini_update_model: str = "gemini-3.5-flash-lite"  # per-minute checks and room scans
+    gemini_video_fps: float = 5.0  # frames per second in the first-look video
+    gemini_fake: bool = False  # demo backup: preloaded answers (fake_gemini.py), no API calls
+    demo_fast_speed: float = 30.0  # Fast Forward button: a 1-min check every 2 s
+    gemini_update_s: float = 60.0  # Gemini checks on the person this often while the incident is open
+    gemini_notify_s: float = 300.0  # the monitor gets an analysis at most this often
+    gemini_notify_urgent_now: bool = True  # ...except when it turns urgent: at once
+    gemini_max_minutes: float = 60.0  # stop checking this long after the fall
+
+    # Rest zones: lying inside one (bed, sofa) is resting, not a fall. Found by a Gemini
+    # room scan when the room is empty and has changed; manual zones can be added to the file.
+    rest_zones: bool = True
+    zones_file: str = str(Path(__file__).parent / "data" / "zones.json")
+    scene_empty_s: float = 5.0  # nobody in view this long before the room is compared
+    scene_change_frac: float = 0.1  # share of the picture that must differ from the scan
+    scene_change_s: float = 20.0  # ...for this long, so passing shadows do not count
+    scene_min_interval_s: float = 600.0  # at most one room scan per 10 min
+    emergency_number: str = "911"  # used in the guidance text ("Call 911 now")
+
+    privacy_view: bool = False  # start with the outline-only view on (the monitor can switch it)
+
+    # Skeleton display smoothing (drawing and privacy view only; detection uses raw landmarks)
+    skel_min_cutoff: float = 0.3  # Hz; lower = calmer when still, more lag
+    skel_beta: float = 0.12  # how fast the cutoff rises with joint speed (px/s); higher = less lag when moving
+    skel_d_cutoff: float = 0.3  # Hz; smoothing of the speed estimate itself
+    skel_body_speed: bool = True  # loosen the filter by whole-body speed, not each joint's own (ignores wobble)
+    skel_hide_visibility: float = 0.3  # a shown joint is hidden only below this (shown above min_visibility)
+    skel_hold_s: float = 0.5  # keep the last skeleton this long when the pose drops out
 
     # Display
     fps_smoothing: float = 0.9  # EMA factor for the FPS readout

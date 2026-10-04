@@ -3,3 +3,4 @@ mediapipe>=1.0.1
 numpy
 pytest
 pygrabber; sys_platform == "win32"  # camera names, to find DroidCam
+zeroconf  # optional: phones can open http://within-reach.local

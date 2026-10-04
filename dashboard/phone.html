@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -7,140 +7,180 @@
 <link rel="manifest" href="/manifest.json">
 <title>Fall Alert</title>
 <style>
-:root{--red:#b3261e;--red-d:#8f1d17;--green:#1d5c4c;--ink:#16302a;--mut:#6b7a74;--bg:#f4f4f1;--amber:#c27c0e;
---pad:clamp(12px,3vw,24px);--gap:clamp(10px,1.8vw,16px);--r:clamp(18px,3vw,24px);--maxw:560px}
+:root{--red:#b3261e;--red-d:#8f1d17;--green:#1d5c4c;--ink:#16302a;--mut:#6b7a74;--bg:#f4f4f1;--amber:#c27c0e}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html{font-size:clamp(15px,.4vw + 13px,18px);-webkit-text-size-adjust:100%}
-body{margin:0;font-family:system-ui,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;min-height:100dvh;padding-bottom:calc(96px + env(safe-area-inset-bottom))}
-img{max-width:100%}
-.hdr{background:var(--green);color:#fff;padding:calc(env(safe-area-inset-top) + 20px) 0 20px}
+body{margin:0;font-family:system-ui,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;padding-bottom:130px}
+.hdr{background:var(--green);color:#fff;padding:calc(env(safe-area-inset-top) + 22px) 20px 20px}
 .hdr.red{background:var(--red)}
-.inner{max-width:var(--maxw);margin:0 auto;padding:0 var(--pad)}
-.hdr .l1{display:flex;justify-content:space-between;gap:10px;font-size:.8rem;font-weight:700;letter-spacing:.05em}
-.hdr h1{margin:10px 0 4px;font-size:clamp(1.6rem,5vw,2.4rem);line-height:1.1}
-.hdr p{margin:0;opacity:.9;font-size:1rem}
-.wrap{max-width:var(--maxw);margin:0 auto;padding:var(--gap) var(--pad)}
-.cols{display:flex;flex-direction:column;gap:var(--gap)}
-.video{position:relative;background:#1d2a27;border-radius:var(--r);overflow:hidden;aspect-ratio:4/3;width:100%}
+.hdr .l1{display:flex;justify-content:space-between;font-size:13px;font-weight:700;letter-spacing:.05em}
+.hdr h1{margin:10px 0 4px;font-size:30px;line-height:1.1}
+.hdr p{margin:0;opacity:.9;font-size:15px}
+.wrap{padding:14px}
+.video{position:relative;background:#1d2a27;border-radius:22px;overflow:hidden;aspect-ratio:4/3}
 .video img{width:100%;height:100%;object-fit:cover;display:block;background:#000}
-.pill{position:absolute;top:12px;background:rgba(0,0,0,.7);color:#fff;border-radius:99px;padding:5px 12px;font-size:.8rem;font-weight:700}
+.pill{position:absolute;top:12px;background:rgba(0,0,0,.7);color:#fff;border-radius:99px;padding:5px 12px;font-size:13px;font-weight:700}
 .pill.live{left:12px}.pill.live:before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff4b3e;margin-right:6px}
 .pill.live.off:before{background:#999}.pill.clk{right:12px}
-.tag{position:absolute;left:12px;bottom:12px;background:#f6b83d;color:#3b2800;border-radius:8px;padding:4px 10px;font-size:.8rem;font-weight:800;display:none}
-.vmsg{position:absolute;inset:0;display:grid;place-items:center;color:#9fb1ab;font-size:.9rem;pointer-events:none;text-align:center;padding:10px}
-.voice{display:none;background:var(--green);color:#fff;border-radius:99px;padding:13px 18px;font-size:.95rem}
-.card{background:#fff;border-radius:var(--r);padding:clamp(14px,2.4vw,20px)}
-.card small{display:block;color:var(--mut);font-weight:800;letter-spacing:.05em;font-size:.75rem;margin-bottom:8px}
-.upd{display:grid;grid-template-columns:4rem 14px minmax(0,1fr);gap:10px;padding:9px 0;font-size:.95rem;align-items:start}
-.upd .tm{color:var(--mut);font-size:.88rem}
+.tag{position:absolute;left:12px;bottom:12px;background:#f6b83d;color:#3b2800;border-radius:8px;padding:4px 10px;font-size:13px;font-weight:800;display:none}
+.vmsg{position:absolute;inset:0;display:grid;place-items:center;color:#9fb1ab;font-size:14px;pointer-events:none;text-align:center;padding:10px}
+.voice{display:none;background:var(--green);color:#fff;border-radius:99px;padding:13px 18px;margin-top:12px;font-size:15px}
+.card{background:#fff;border-radius:22px;padding:16px 18px;margin-top:12px}
+.card small{display:block;color:var(--mut);font-weight:800;letter-spacing:.05em;font-size:12px;margin-bottom:8px}
+.upd{display:grid;grid-template-columns:62px 14px 1fr;gap:10px;padding:9px 0;font-size:15px;align-items:start}
+.upd .tm{color:var(--mut);font-size:14px}
 .dot{width:10px;height:10px;border-radius:50%;background:#8a9a94;margin-top:6px}.dot.red{background:var(--red)}.dot.amber{background:var(--amber)}
 .upd.now b{font-weight:800}
 a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
-.cd{background:#fcf0d4;color:#7a4d06;border-radius:14px;padding:12px 14px;font-size:.9rem;font-weight:700;display:none}
-.empty{color:var(--mut);font-size:.9rem}
-.bar{position:fixed;left:0;right:0;bottom:0;padding:12px 0 calc(env(safe-area-inset-bottom) + 12px);background:linear-gradient(transparent,var(--bg) 35%);z-index:10}
-.bar .inner{display:flex;gap:12px}
-.bar button,.bar a{flex:1;border-radius:18px;padding:14px 8px;font-weight:800;font-size:1rem;text-align:center;text-decoration:none;border:2px solid var(--ink);background:#fff;color:var(--ink);user-select:none;-webkit-user-select:none;touch-action:none;min-height:56px}
+.cd{background:#fcf0d4;color:#7a4d06;border-radius:14px;padding:12px 14px;margin-top:12px;font-size:14px;font-weight:700;display:none}
+.empty{color:var(--mut);font-size:14px}
+.bar{position:fixed;left:0;right:0;bottom:0;padding:12px 14px calc(env(safe-area-inset-bottom) + 12px);background:linear-gradient(transparent,var(--bg) 35%);display:flex;gap:12px}
+.bar button,.bar a{flex:1;border-radius:18px;padding:16px 8px;font-weight:800;font-size:16px;text-align:center;text-decoration:none;border:2px solid var(--ink);background:#fff;color:var(--ink);user-select:none;-webkit-user-select:none;touch-action:none}
 .bar .call{background:var(--red);border-color:var(--red);color:#fff}
 .bar .talking{background:var(--green);border-color:var(--ink);color:#fff}
-.sub{display:flex;gap:10px}
-.sub button{flex:1;border:0;border-radius:12px;padding:12px;font-weight:700;font-size:.9rem;background:#e9ece8;color:var(--ink);min-height:46px}
-.toast{position:fixed;left:50%;transform:translateX(-50%);width:min(520px,calc(100% - 32px));bottom:calc(110px + env(safe-area-inset-bottom));background:#16302a;color:#fff;border-radius:14px;padding:13px 16px;font-size:.9rem;display:none;z-index:30}
-.modal{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;z-index:40;flex-direction:column;justify-content:center;align-items:center;padding:14px;gap:10px}
-.modal.on{display:flex}.modal img{width:min(900px,100%);max-height:72dvh;object-fit:contain;border-radius:14px}.modal p{color:#fff;text-align:center;margin:0}
-.modal button{background:#fff;border:0;border-radius:12px;padding:13px 24px;font-weight:800;font-size:1rem}
-
-/* Tablet (>= 768px): wider page, video left and updates right */
-@media (min-width:768px){
-  :root{--maxw:900px}
-  .cols{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);align-items:start}
-  .cols .col{display:flex;flex-direction:column;gap:var(--gap);min-width:0}
-}
-/* Laptop / desktop (>= 1200px) */
-@media (min-width:1200px){
-  :root{--maxw:1120px}
-  .cols{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}
-}
-/* Phone in landscape or very short screen */
-@media (orientation:landscape) and (max-height:520px){
-  :root{--maxw:980px}
-  .hdr{padding-top:calc(env(safe-area-inset-top) + 10px);padding-bottom:10px}
-  .hdr h1{font-size:1.4rem;margin:4px 0 2px}
-  .cols{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);align-items:start}
-  .cols .col{display:flex;flex-direction:column;gap:var(--gap);min-width:0}
-  .video{aspect-ratio:16/10}
-  body{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
-  .bar button,.bar a{min-height:46px;padding:8px}
-}
-@media (prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important} }
+.sub{display:flex;gap:10px;margin-top:12px}
+.sub button{flex:1;border:0;border-radius:12px;padding:12px;font-weight:700;font-size:14px;background:#e9ece8;color:var(--ink)}
+.toast{position:fixed;left:16px;right:16px;bottom:110px;background:#16302a;color:#fff;border-radius:14px;padding:13px 16px;font-size:14px;display:none;z-index:30}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;z-index:40;flex-direction:column;justify-content:center;padding:14px}
+.modal.on{display:flex}.modal img{width:100%;border-radius:14px}.modal p{color:#fff;text-align:center}
+.modal button{background:#fff;border:0;border-radius:12px;padding:13px;font-weight:800;font-size:15px}
+/* Mockup call flow: contact picker + call screen. Never dials a real number. */
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:50;align-items:flex-end}
+.sheet.on{display:flex}
+.sheet .pnl{background:#fff;width:100%;border-radius:24px 24px 0 0;padding:10px 16px calc(env(safe-area-inset-bottom) + 16px);max-height:80vh;overflow:auto}
+.sheet .grab{width:44px;height:5px;border-radius:3px;background:#d5dbd8;margin:4px auto 12px}
+.sheet h2{margin:0 0 4px;font-size:21px}.sheet .hint{color:var(--mut);font-size:14px;margin:0 0 10px}
+.ct{display:flex;align-items:center;gap:12px;width:100%;border:0;background:none;padding:12px 4px;border-bottom:1px solid #eef1ee;text-align:left;font:inherit;color:var(--ink)}
+.ct .av{width:46px;height:46px;border-radius:50%;background:var(--green);color:#fff;display:grid;place-items:center;font-weight:800;font-size:19px;flex:none}
+.ct.sos .av{background:var(--red)}
+.ct b{display:block;font-size:17px}.ct span{color:var(--mut);font-size:14px}
+.ct .ph{margin-left:auto;font-size:22px}
+.sheet .cancel{width:100%;margin-top:12px;border:0;border-radius:14px;padding:14px;font-weight:800;font-size:16px;background:#e9ece8;color:var(--ink)}
+.callscr{position:fixed;inset:0;z-index:60;display:none;flex-direction:column;align-items:center;justify-content:space-between;
+  padding:calc(env(safe-area-inset-top) + 70px) 24px calc(env(safe-area-inset-bottom) + 40px);
+  background:linear-gradient(170deg,#1d5c4c,#0e2621 70%);color:#fff;text-align:center}
+.callscr.on{display:flex}
+.callscr .big{width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.14);display:grid;place-items:center;font-size:50px;font-weight:800;margin:0 auto 18px}
+.callscr.ringing .big{animation:ring 1.4s infinite}
+@keyframes ring{0%{box-shadow:0 0 0 0 rgba(255,255,255,.35)}100%{box-shadow:0 0 0 34px rgba(255,255,255,0)}}
+.callscr h2{margin:0;font-size:30px}.callscr .num{opacity:.75;margin-top:4px}.callscr .stat{margin-top:14px;font-size:17px;opacity:.9;font-variant-numeric:tabular-nums}
+.callscr .ctl{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;width:100%;max-width:320px;margin:0 auto}
+.callscr .ctl button{border:0;background:rgba(255,255,255,.14);color:#fff;border-radius:50%;width:72px;height:72px;margin:0 auto;font-size:26px}
+.callscr .ctl button.act{background:#fff;color:#0e2621}
+.callscr .ctl small{display:block;font-size:12px;margin-top:6px;opacity:.85}
+.callscr .end{border:0;background:#e5484d;color:#fff;width:78px;height:78px;border-radius:50%;font-size:32px;margin-top:26px}
+.callscr .demo{font-size:12px;opacity:.55;margin-top:14px}
+/* Privacy view switch */
+.priv{display:flex;align-items:center;gap:14px;background:#fff;border-radius:22px;padding:14px 18px;margin-top:12px;cursor:pointer}
+.priv .txt{flex:1}.priv b{display:block;font-size:16px}.priv .txt span{display:block;color:var(--mut);font-size:14px;margin-top:3px;line-height:1.35}
+.priv input{position:absolute;opacity:0;pointer-events:none}
+.priv .sw{flex:none;width:52px;height:32px;border-radius:99px;background:#cfd6d2;position:relative;transition:background .2s}
+.priv .sw:after{content:"";position:absolute;top:3px;left:3px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .2s}
+.priv input:checked + .sw{background:var(--green)}.priv input:checked + .sw:after{left:23px}
+.priv input:focus-visible + .sw{outline:3px solid #9cc3b8;outline-offset:2px}
+.pill.priv-on{left:auto;right:12px;top:auto;bottom:12px;display:none}
 </style>
 </head>
 <body>
-<div class="hdr" id="hdr"><div class="inner">
-  <div class="l1"><span id="hL">&#9888; ĐANG THEO DÕI</span><span id="hR"></span></div>
-  <h1 id="hT">Đang kết nối...</h1>
+<div class="hdr" id="hdr">
+  <div class="l1"><span id="hL">&#9888; MONITORING</span><span id="hR"></span></div>
+  <h1 id="hT">Connecting...</h1>
   <p id="hS"></p>
+</div>
+
+<div class="wrap">
+  <div class="video">
+    <span class="pill live off" id="live">LIVE</span><span class="pill clk" id="clk">--</span>
+    <img id="vid" alt="">
+    <div class="vmsg" id="vmsg">Waiting for video from main.py...</div>
+    <span class="tag" id="vtag"></span>
+    <span class="pill priv-on" id="privPill">&#128100; Outline only</span>
+  </div>
+
+  <label class="priv" for="priv">
+    <span class="txt"><b>Privacy view</b><span id="privHint">Show them as a simple outline instead of the camera picture. Only the outline is shared, including alert photos and clips.</span></span>
+    <input type="checkbox" id="priv" role="switch" aria-describedby="privHint"><span class="sw"></span>
+  </label>
+
+  <label class="priv" for="demoGraph">
+    <span class="txt"><b>Show graph (for demo)</b><span>Draw the phone's motion graph on the live video, so you can see the impact of a fall.</span></span>
+    <input type="checkbox" id="demoGraph" role="switch"><span class="sw"></span>
+  </label>
+  <label class="priv" for="demoSkel">
+    <span class="txt"><b>Show skeleton (for demo)</b><span>Draw the body outline the camera tracks on top of the live video.</span></span>
+    <input type="checkbox" id="demoSkel" role="switch"><span class="sw"></span>
+  </label>
+
+  <div class="voice" id="voice">&#128266; Your voice is playing in the room</div>
+
+  <div class="card">
+    <small>LIVE UPDATES</small>
+    <div id="updates"><div class="empty">No updates yet.</div></div>
+  </div>
+
+  <div class="cd" id="cd"></div>
+
+  <div class="sub">
+    <button id="handled">Mark as handled</button>
+    <button id="settings">Info</button>
+  </div>
+</div>
+
+<div class="bar">
+  <button id="talk">&#127908;<br>Hold to talk</button>
+  <button class="call" id="call">&#128222;<br>Call</button>
+</div>
+
+<div class="sheet" id="sheet"><div class="pnl">
+  <div class="grab"></div>
+  <h2>Who do you want to call?</h2>
+  <p class="hint">Pick someone to call now.</p>
+  <div id="ctList"></div>
+  <button class="cancel" id="ctCancel">Cancel</button>
 </div></div>
 
-<div class="wrap"><div class="cols">
-  <div class="col">
-    <div class="video">
-      <span class="pill live off" id="live">LIVE</span><span class="pill clk" id="clk">--</span>
-      <img id="vid" alt="">
-      <div class="vmsg" id="vmsg">Đang chờ video từ main.py...</div>
-      <span class="tag" id="vtag"></span>
-    </div>
-    <div class="voice" id="voice">&#128266; Giọng nói của bạn đang phát trong phòng</div>
+<div class="callscr" id="callscr">
+  <div>
+    <div class="big" id="cAv">?</div>
+    <h2 id="cName"></h2>
+    <div class="num" id="cNum"></div>
+    <div class="stat" id="cStat">Calling…</div>
   </div>
-  <div class="col">
-    <div class="card">
-      <small>CẬP NHẬT TRỰC TIẾP</small>
-      <div id="updates"><div class="empty">Chưa có cập nhật.</div></div>
+  <div style="width:100%">
+    <div class="ctl">
+      <div><button data-tg>&#128263;</button><small>Mute</small></div>
+      <div><button data-tg>&#128266;</button><small>Speaker</small></div>
+      <div><button data-tg>&#9000;</button><small>Keypad</small></div>
     </div>
-    <div class="cd" id="cd"></div>
-    <div class="sub">
-      <button id="handled">Đánh dấu đã xử lý</button>
-      <button id="settings">Thông tin</button>
-    </div>
+    <button class="end" id="cEnd" aria-label="End call">&#128222;</button>
+    <div class="demo">Demo — no real call is made</div>
   </div>
-</div></div>
-
-<div class="bar"><div class="inner">
-  <button id="talk">&#127908;<br>Giữ để nói</button>
-  <a class="call" id="call" href="tel:911">&#128222;<br>Gọi 911</a>
-</div></div>
+</div>
 
 <div class="toast" id="toast"></div>
-<div class="modal" id="modal"><img id="mImg" alt=""><p id="mTxt"></p><button id="mClose">Đóng</button></div>
+<div class="modal" id="modal"><img id="mImg" alt=""><p id="mTxt"></p><button id="mClose">Close</button></div>
 
 <script>
 (function(){
   var $=function(i){return document.getElementById(i);};
-  var cfg={name:"Người thân",room:"Phòng khách",address:"",phone:"911",countdown:120,push:false,talk:false};
+  var cfg={name:"Your family member",room:"Living room",address:"",phone:"911",countdown:120,push:false,talk:false};
   var events=[], st={alert:false,offset:0,srv:false,cam:false,text:""}, logs=[];
   var handled=JSON.parse(localStorage.getItem("fd.phone.handled")||"{}");
   var lastName=null, first=true, audio=null;
 
-  // screen size detection -> body[data-size]: compact | medium | expanded
-  function detect(){
-    var w=window.innerWidth;
-    document.body.dataset.size = w<768 ? "compact" : (w<1200 ? "medium" : "expanded");
-    document.body.dataset.orient = w>window.innerHeight ? "landscape" : "portrait";
-  }
-  window.addEventListener("resize",detect); window.addEventListener("orientationchange",detect); detect();
-
   function pad(n){return (n<10?"0":"")+n;}
   function hm(t){var d=new Date(t*1000),h=d.getHours();return (h%12||12)+":"+pad(d.getMinutes())+" "+(h>=12?"PM":"AM");}
-  function full(t){return new Date(t*1000).toLocaleString("vi-VN");}
+  function full(t){return new Date(t*1000).toLocaleString();}
   function nowS(){return Date.now()/1000+st.offset;}
-  function ago(t){var s=Math.max(0,Math.round(nowS()-t)); if(s<60) return s+" giây trước"; if(s<3600) return Math.floor(s/60)+" phút trước"; return Math.floor(s/3600)+" giờ trước";}
-  function kind(k){return k==="prolonged_lying"?"Nằm bất động lâu":"Té ngã";}
+  function ago(t){var s=Math.max(0,Math.round(nowS()-t)); if(s<60) return s+" s ago"; if(s<3600) return Math.floor(s/60)+" min ago"; return Math.floor(s/3600)+" h ago";}
+  function kind(k){return k==="prolonged_lying"?"Prolonged lying":"Fall";}
   function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
   function latest(){return events.length?events[events.length-1]:null;}
   function log(t,c){logs.push({t:Date.now()/1000+st.offset,text:t,color:c||""}); if(logs.length>20) logs.shift();}
   function toast(m){var t=$("toast");t.textContent=m;t.style.display="block";clearTimeout(t._h);t._h=setTimeout(function(){t.style.display="none";},3500);}
 
-  function applyCfg(){ $("call").href="tel:"+cfg.phone; $("call").innerHTML="&#128222;<br>Gọi "+esc(cfg.phone); }
+  function applyCfg(){
+    $("call").innerHTML="&#128222;<br>Call";
+  }
   fetch("/config.json").then(function(r){return r.json();}).then(function(c){cfg=Object.assign(cfg,c);applyCfg();render();}).catch(function(){});
 
   function beep(){
@@ -149,7 +189,7 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
       o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+.6);}catch(e){}
   }
   function alarm(e){ if(navigator.vibrate) navigator.vibrate([400,150,400,150,600]); beep();
-    if(window.Notification&&Notification.permission==="granted"){try{new Notification(cfg.name+" có thể đã ngã",{body:full(e.t),icon:e.url});}catch(x){}} }
+    if(window.Notification&&Notification.permission==="granted"){try{new Notification(cfg.name+" may have fallen",{body:full(e.t),icon:e.url});}catch(x){}} }
 
   function video(){
     var v=$("vid"); v.onload=function(){st.cam=true;$("vmsg").style.display="none";render();};
@@ -161,10 +201,10 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
     fetch("/events.json",{cache:"no-store"}).then(function(r){return r.json();}).then(function(d){
       var firstOk=!st.srv; st.srv=true; st.offset=d.now-Date.now()/1000;
       events=d.events||[]; var l=latest();
-      if(l&&l.name!==lastName){ if(!first){alarm(l);log("Phát hiện "+kind(l.kind).toLowerCase()+" trong "+cfg.room,"red");} lastName=l.name; }
-      if(d.alert&&!st.alert) log("Chưa thấy chuyển động kể từ lúc ngã","amber");
+      if(l&&l.name!==lastName){ if(!first){alarm(l);log(kind(l.kind)+" detected in the "+cfg.room.toLowerCase(),"red");} lastName=l.name; }
+      if(d.alert&&!st.alert) log("No movement since the fall","amber");
       st.alert=!!d.alert; st.text=d.alert_text||""; first=false;
-      if(firstOk) log("Đã kết nối máy chủ");
+      if(firstOk) log("Connected to the server");
       render();
     }).catch(function(){ st.srv=false; render(); });
   }
@@ -173,25 +213,25 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
     var l=latest(); var active=st.alert&&l&&!handled[l.name];
     $("hdr").className="hdr"+(active?" red":""); $("theme").content=active?"#b3261e":"#1d5c4c";
     if(active){
-      $("hL").innerHTML="&#9888; "+(l.kind==="prolonged_lying"?"BẤT ĐỘNG LÂU":"FALL DETECTED"); $("hR").textContent=ago(l.t);
-      $("hT").textContent=cfg.name+" có thể đã ngã"; $("hS").textContent=cfg.room+(cfg.address?" · "+cfg.address:"");
+      $("hL").innerHTML="&#9888; "+(l.kind==="prolonged_lying"?"PROLONGED LYING":"FALL DETECTED"); $("hR").textContent=ago(l.t);
+      $("hT").textContent=cfg.name+" may have fallen"; $("hS").textContent=cfg.room+(cfg.address?" · "+cfg.address:"");
     } else {
-      $("hL").innerHTML="&#128737; ĐANG THEO DÕI"; $("hR").textContent=l?"Lần cuối: "+ago(l.t):"";
-      $("hT").textContent=st.srv?"Đang theo dõi "+cfg.name:"Mất kết nối máy chủ"; $("hS").textContent=cfg.room+(cfg.address?" · "+cfg.address:"");
+      $("hL").innerHTML="&#128737; MONITORING"; $("hR").textContent=l?"Last event: "+ago(l.t):"";
+      $("hT").textContent=st.srv?"Watching over "+cfg.name:"Lost connection to the server"; $("hS").textContent=cfg.room+(cfg.address?" · "+cfg.address:"");
     }
     var on=st.srv&&st.cam; $("live").classList.toggle("off",!on);
     var tg=$("vtag"); if(active){tg.style.display="block";tg.textContent=kind(l.kind)+" · "+hm(l.t);} else tg.style.display="none";
 
     var items=logs.map(function(x){return {t:x.t,html:esc(x.text),color:x.color};});
-    events.slice(-6).forEach(function(e){items.push({t:e.t,html:'<a class="lnk" data-ev="'+esc(e.name)+'">'+kind(e.kind)+' phát hiện trong '+esc(cfg.room)+'</a>',color:"red"});});
-    if(cfg.push&&l) items.push({t:l.t+1,html:"Đã gửi cảnh báo tới điện thoại này",color:""});
+    events.slice(-6).forEach(function(e){items.push({t:e.t,html:'<a class="lnk" data-ev="'+esc(e.name)+'">'+kind(e.kind)+' detected in the '+esc(cfg.room.toLowerCase())+'</a>',color:"red"});});
+    if(cfg.push&&l) items.push({t:l.t+1,html:"Alert sent to this phone",color:""});
     items.sort(function(a,b){return b.t-a.t;});
-    if(active) items.unshift({t:nowS(),html:"Đang chờ người thân phản hồi",color:"",now:true});
+    if(active) items.unshift({t:nowS(),html:"Waiting for a response",color:"",now:true});
     $("updates").innerHTML=items.length?items.slice(0,7).map(function(x){
-      return '<div class="upd'+(x.now?' now':'')+'"><span class="tm">'+(x.now?"Bây giờ":hm(x.t))+'</span><span class="dot '+x.color+'"></span><span>'+(x.now?"<b>"+x.html+"</b>":x.html)+'</span></div>';
-    }).join(""):'<div class="empty">Chưa có cập nhật.</div>';
+      return '<div class="upd'+(x.now?' now':'')+'"><span class="tm">'+(x.now?"Now":hm(x.t))+'</span><span class="dot '+x.color+'"></span><span>'+(x.now?"<b>"+x.html+"</b>":x.html)+'</span></div>';
+    }).join(""):'<div class="empty">No updates yet.</div>';
 
-    $("handled").style.display=l?"":"none"; $("handled").textContent=l&&handled[l.name]?"Bỏ đánh dấu đã xử lý":"Đánh dấu đã xử lý";
+    $("handled").style.display=l?"":"none"; $("handled").textContent=l&&handled[l.name]?"Unmark as handled":"Mark as handled";
     tickCd();
   }
 
@@ -201,7 +241,7 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
     if(!active||total<=0){el.style.display="none";return;}
     var left=Math.max(0,Math.round(total-(nowS()-l.t)));
     el.style.display="block";
-    el.innerHTML="&#9201; "+(left>0?"Gợi ý gọi "+esc(cfg.phone)+" sau "+Math.floor(left/60)+":"+pad(left%60)+" nếu chưa ai xử lý":"Đã hết thời gian chờ — hãy gọi "+esc(cfg.phone)+" ngay");
+    el.innerHTML="&#9201; "+(left>0?"Call "+esc(cfg.phone)+" in "+Math.floor(left/60)+":"+pad(left%60)+" if no one acts":"Time is up — call "+esc(cfg.phone)+" now");
   }
   setInterval(tickCd,500);
 
@@ -209,18 +249,92 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
     var ev=events.filter(function(x){return x.name===t.getAttribute("data-ev");})[0]; if(!ev)return;
     $("mImg").src=ev.url; $("mTxt").textContent=kind(ev.kind)+" · "+full(ev.t); $("modal").classList.add("on");});
   $("mClose").onclick=function(){$("modal").classList.remove("on");};
-  $("handled").onclick=function(){var l=latest();if(!l)return; if(handled[l.name]) delete handled[l.name]; else handled[l.name]=1; localStorage.setItem("fd.phone.handled",JSON.stringify(handled)); render();};
+  $("handled").onclick=function(){var l=latest();if(!l)return; if(handled[l.name]) delete handled[l.name]; else handled[l.name]=1; localStorage.setItem("fd.phone.handled",JSON.stringify(handled)); render();
+    // Also tell the camera PC, so it stops the Gemini check-ins for this fall.
+    fetch("/api/handled?event="+encodeURIComponent(l.name)+"&on="+(handled[l.name]?1:0),{method:"POST"}).catch(function(){});};
   $("settings").onclick=function(){
     if(window.Notification&&Notification.permission==="default") Notification.requestPermission();
     beep(); if(navigator.vibrate) navigator.vibrate(200);
-    toast("Âm báo và rung đã bật khi trang đang mở. Tên, địa chỉ, số khẩn cấp đặt bằng tham số khi chạy main.py.");
+    toast("Sound and vibration are on while this page is open. Name, address and emergency number are set with main.py options.");
   };
 
   var tb=$("talk");
-  function talkDown(e){ e.preventDefault(); if(!cfg.talk){ toast("Tính năng nói chuyện hai chiều chưa được kết nối. Hiện tại hãy gọi điện trực tiếp."); return; } tb.classList.add("talking"); $("voice").style.display="block"; }
+  function talkDown(e){ e.preventDefault(); if(!cfg.talk){ toast("Two-way talk is not connected yet. Please call directly for now."); return; } tb.classList.add("talking"); $("voice").style.display="block"; }
   function talkUp(){ tb.classList.remove("talking"); $("voice").style.display="none"; }
   tb.addEventListener("pointerdown",talkDown); tb.addEventListener("pointerup",talkUp); tb.addEventListener("pointercancel",talkUp); tb.addEventListener("pointerleave",talkUp);
-  if(location.hash==="#talk") setTimeout(function(){toast("Tính năng nói chuyện hai chiều chưa được kết nối. Hãy gọi điện trực tiếp.");},800);
+  if(location.hash==="#talk") setTimeout(function(){toast("Two-way talk is not connected yet. Please call directly.");},800);
+
+  // ---- Call: contact picker, then a mock call screen (demo only, never dials) ----
+  var DEMO_CONTACTS=[{name:"Lan",relationship:"Daughter",phone:"0901 234 567"},{name:"Minh",relationship:"Son",phone:"0912 345 678"}];
+  var callTimer=null, callStart=0;
+  function contacts(){
+    var list=(cfg.contacts&&cfg.contacts.length)?cfg.contacts:DEMO_CONTACTS;
+    return list.concat([{name:"Emergency",relationship:"Emergency services",phone:cfg.phone||"911",sos:true}]);
+  }
+  function openPicker(){
+    $("ctList").innerHTML=contacts().map(function(c,i){
+      return '<button class="ct'+(c.sos?' sos':'')+'" data-ct="'+i+'"><span class="av">'+esc((c.name||"?").charAt(0).toUpperCase())+
+        '</span><span><b>'+esc(c.name)+'</b><span>'+esc(c.relationship||"")+' · '+esc(c.phone||"")+'</span></span><span class="ph">&#128222;</span></button>';
+    }).join("");
+    $("sheet").classList.add("on");
+  }
+  function closePicker(){ $("sheet").classList.remove("on"); }
+  function startCall(c){
+    closePicker();
+    $("cAv").textContent=(c.name||"?").charAt(0).toUpperCase(); $("cName").textContent=c.name;
+    $("cNum").textContent=(c.relationship?c.relationship+" · ":"")+(c.phone||"");
+    $("cStat").textContent="Calling…";
+    document.querySelectorAll("[data-tg]").forEach(function(b){b.classList.remove("act");});
+    var scr=$("callscr"); scr.className="callscr on ringing";
+    clearInterval(callTimer); callStart=0;
+    callTimer=setTimeout(function(){ // pretend the other side picks up
+      scr.classList.remove("ringing"); callStart=Date.now();
+      callTimer=setInterval(function(){var s=Math.floor((Date.now()-callStart)/1000);$("cStat").textContent=pad(Math.floor(s/60))+":"+pad(s%60);},250);
+    },3000);
+  }
+  function endCall(){
+    clearTimeout(callTimer); clearInterval(callTimer);
+    $("cStat").textContent="Call ended"; $("callscr").classList.remove("ringing");
+    setTimeout(function(){$("callscr").className="callscr";},900);
+  }
+  $("call").onclick=openPicker;
+  $("ctCancel").onclick=closePicker;
+  $("sheet").onclick=function(e){ if(e.target===$("sheet")) closePicker(); };
+  $("ctList").onclick=function(e){var b=e.target.closest("[data-ct]"); if(b) startCall(contacts()[+b.getAttribute("data-ct")]);};
+  $("cEnd").onclick=endCall;
+  document.querySelectorAll("[data-tg]").forEach(function(b){b.onclick=function(){b.classList.toggle("act");};});
+  // ---- Privacy view: one shared setting on the camera PC (it stops sending the camera picture) ----
+  function showPriv(on){ $("priv").checked=on; $("privPill").style.display=on?"block":"none"; }
+  // Privacy view changes what family sees. Gemini (only when its key is set) still gets real
+  // camera pictures: a short clip of a detected fall, and empty-room pictures for the rest zones.
+  function privHint(){
+    var what=[];
+    if(cfg.gemini_falls) what.push("checks a short camera clip when a fall is detected");
+    if(cfg.gemini_scan) what.push((what.length?"and ":"")+"looks at pictures of the room taken when no one is in view, to find the bed and sofa");
+    $("privHint").textContent="Show "+cfg.name+" as a simple outline instead of the camera picture. "+
+      (what.length?"Family sees only the outline, including alert photos and clips. Google's Gemini AI still "+what.join(" ")+"."
+                  :"Only the outline is shared, including alert photos and clips.");
+  }
+  function loadPriv(){ fetch("/api/privacy",{cache:"no-store"}).then(function(r){return r.json();}).then(function(j){showPriv(!!j.on);}).catch(function(){}); }
+  $("priv").onchange=function(){
+    var want=$("priv").checked;
+    fetch("/api/privacy?on="+(want?1:0),{method:"POST"}).then(function(r){return r.json();})
+      .then(function(j){showPriv(!!j.on); toast(j.on?"Privacy view on: family sees only an outline.":"Camera picture is back on.");})
+      .catch(function(){showPriv(!want); toast("Couldn't reach the camera. Try again.");});
+  };
+  loadPriv(); setInterval(loadPriv,5000);  // someone else may switch it
+
+  // ---- Demo overlays (live video only): phone graph and skeleton ----
+  function showDemo(d){ $("demoGraph").checked=!!d.graph; $("demoSkel").checked=!!d.skeleton; }
+  function loadDemo(){ fetch("/api/demo",{cache:"no-store"}).then(function(r){return r.json();}).then(showDemo).catch(function(){}); }
+  function setDemo(key,on){
+    fetch("/api/demo?"+key+"="+(on?1:0),{method:"POST"}).then(function(r){return r.json();}).then(showDemo)
+      .catch(function(){ loadDemo(); toast("Couldn't reach the camera. Try again."); });
+  }
+  $("demoGraph").onchange=function(){ setDemo("graph",this.checked); };
+  $("demoSkel").onchange=function(){ setDemo("skeleton",this.checked); };
+  loadDemo(); setInterval(loadDemo,5000);
+  fetch("/config.json").then(function(r){return r.json();}).then(function(c){if(c.name)cfg.name=c.name;cfg.gemini_falls=!!c.gemini_falls;cfg.gemini_scan=!!c.gemini_scan;privHint();}).catch(function(){});
 
   video(); poll(); setInterval(poll,2000);
 })();

@@ -22,7 +22,7 @@ import sys
 import threading
 import time
 import urllib.request
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -57,6 +57,9 @@ class Incident:
     status: str
     snapshot: str | None        # file name inside events_dir
     replied_t: float | None = None
+    reports: list[dict] = field(default_factory=list)  # Gemini analyses, oldest first
+    sent_report: dict | None = None  # the last analysis the monitor was notified about
+    handled: bool = False       # the monitor tapped "Mark as handled": no more Gemini checks
 
 
 def lan_url(port: int) -> str:
@@ -108,6 +111,8 @@ class AlertManager:
         self.publish = publish
         self.clock = clock
         self.incidents: dict[str, Incident] = {}
+        self.last_incident_id: str | None = None  # newest incident, for the Gemini analyst
+        self.notify_speed = 1.0  # demo fast-forward: the 5-min notification spacing shrinks too
         self.messages: list[dict] = []  # person -> monitor: {"t", "kind", "text", "file"}
         self.voice_dir = Path(cfg.events_dir) / "voice"
         self._lock = threading.Lock()  # replies arrive on the server's threads
@@ -124,7 +129,45 @@ class AlertManager:
             inc = Incident(id=inc_id, t=event.timestamp, kind=event.kind, status=WAITING,
                            snapshot=snap)
             self.incidents[inc.id] = inc
+            self.last_incident_id = inc.id
         self.publish(self._person_message(inc))
+
+    # --- Gemini analysis (gemini.FallAnalyst calls these) -----------------------------
+    def is_open(self, incident_id: str) -> bool:
+        """Still worth analysing: not answered "I'm OK" and not marked handled."""
+        inc = self.incidents.get(incident_id)
+        return inc is not None and inc.status != OK and not inc.handled
+
+    def set_handled(self, snapshot: str, handled: bool) -> bool:
+        """The monitor page marks events by snapshot file name. Returns False if no
+        incident has that snapshot."""
+        with self._lock:
+            for inc in self.incidents.values():
+                if inc.snapshot == snapshot:
+                    inc.handled = handled
+                    return True
+        return False
+
+    def add_report(self, incident_id: str, report: dict) -> None:
+        """Store an analysis (gemini.report_dict); the latest one goes into the
+        monitor's alert. After that the monitor gets one at most every gemini_notify_s,
+        so a check every minute is not a notification every minute. The exception is
+        the situation turning urgent, which is sent at once (gemini_notify_urgent_now)."""
+        with self._lock:
+            inc = self.incidents.get(incident_id)
+            if inc is None:
+                return
+            inc.reports.append(report)
+            if inc.status not in (HELP, NO_REPLY):
+                return
+            last = inc.sent_report
+            became_urgent = (self.cfg.gemini_notify_urgent_now and report["urgency"] == "urgent"
+                             and (last is None or last["urgency"] != "urgent"))
+            if last is not None and not became_urgent and \
+                    report["t"] - last["t"] < self.cfg.gemini_notify_s / self.notify_speed:
+                return
+            inc.sent_report = report
+        self.publish(self._monitor_update_message(inc, report))
 
     # --- called by main.py every frame ----------------------------------------------
     def tick(self) -> None:
@@ -160,11 +203,17 @@ class AlertManager:
         return {
             "/respond": self._route_respond,
             "/incidents.json": self._route_incidents,
-            "/person": self._route_person,
+            "/granny": self._route_person,
             "/message": self._route_message,
             "/voice": self._route_voice,
             "/messages.json": self._route_messages,
+            "/api/handled": self._route_handled,
         }
+
+    def _route_handled(self, q):
+        """POST /api/handled?event=<snapshot name>&on=1|0 from the monitor page."""
+        found = self.set_handled(Path(q.get("event", "")).name, q.get("on", "1") in ("1", "true"))
+        return (200 if found else 404), "application/json", json.dumps({"ok": found}).encode()
 
     def upload_routes(self) -> dict:
         """POST routes that need the request body: handler(query, body, headers),
@@ -280,7 +329,7 @@ class AlertManager:
                         f"Otherwise your contact is alerted in {self.cfg.reply_timeout_s:.0f} s."),
             "priority": 5,
             "tags": ["rotating_light"],
-            "click": f"{self.base_url}/person?id={quote(inc.id)}",
+            "click": f"{self.base_url}/granny?id={quote(inc.id)}",
             "actions": actions,
         }
 
@@ -300,9 +349,28 @@ class AlertManager:
         if self.cfg.person_number:
             msg["actions"].append({"action": "view", "label": "Call person",
                                    "url": f"tel:{self.cfg.person_number}"})
+        if inc.reports:  # Gemini already looked at the fall
+            msg["message"] += "\n" + self._report_text(inc.reports[-1])
+            inc.sent_report = inc.reports[-1]
         if inc.snapshot and self.cfg.ntfy_attach_snapshot:
             msg["attach"] = f"{self.base_url}/events/{quote(inc.snapshot)}"
         return msg
+
+    @staticmethod
+    def _report_text(r: dict) -> str:
+        return (f"{r['description']}\nWhat to do: {r['guidance']}\n"
+                "(Automated guidance. If in doubt, call emergency services.)")
+
+    def _monitor_update_message(self, inc: Incident, r: dict) -> dict:
+        when = "Fall details" if r["minutes"] < 1 else f"Update, {r['minutes']:.0f} min after the fall"
+        return {
+            "topic": self.cfg.ntfy_monitor_topic,
+            "title": f"{when} - {self.cfg.room_name}",
+            "message": self._report_text(r),
+            "priority": {"urgent": 5, "high": 4}.get(r["urgency"], 3),
+            "tags": ["rotating_light" if r["urgency"] == "urgent" else "information_source"],
+            "click": self._dashboard_url(inc),
+        }
 
     def _monitor_ok_message(self, inc: Incident) -> dict:
         return {
@@ -353,7 +421,7 @@ def demo() -> int:
     manager.send(FallEvent(timestamp=time.time(), kind="fall", peak_hip_vel=3.0,
                            torso_angle=95.0, snapshot_path=str(snaps[-1]) if snaps else None,
                            stream_t=0.0))
-    print(f"Fake fall sent. Person page: {manager.base_url}/person  (Ctrl+C to stop)")
+    print(f"Fake fall sent. Person page: {manager.base_url}/granny  (Ctrl+C to stop)")
     last = None
     try:
         while True:

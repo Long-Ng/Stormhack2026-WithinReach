@@ -3,7 +3,8 @@
 Tiny web server (default http://localhost:5000):
   /                desktop dashboard (dashboard/index.html or dashboard.html)
   /mainscreen      main screen (dashboard/mainscreen.html)
-  /phone           phone page (dashboard/phone.html); first visit goes through /onboarding
+  /monitor         monitor's phone page (dashboard/phone.html); first visit goes through /onboarding
+  /phone, /person  old names: redirect to /monitor and /granny
   /onboarding      onboarding flow (dashboard/onboarding.html); /onboarding?force=1 runs it again
   /config.json     name / room / address / emergency number (+ onboarding data when present)
   /video           live MJPEG stream
@@ -40,7 +41,8 @@ MAIN_PAGES = [HERE.parent / "dashboard" / "mainscreen.html", HERE / "mainscreen.
 ONBOARDING_PAGES = [HERE.parent / "dashboard" / "onboarding.html", HERE / "onboarding.html"]
 MEDIA_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".mp4": "video/mp4", ".webm": "video/webm",
                ".avi": "video/x-msvideo"}
-MANIFEST = {"name": "Within Reach", "short_name": "Within Reach", "start_url": "/phone", "display": "standalone",
+OLD_PATHS = {"/phone": "/monitor", "/phone.html": "/monitor", "/person": "/granny"}
+MANIFEST = {"name": "Within Reach", "short_name": "Within Reach", "start_url": "/monitor", "display": "standalone",
             "background_color": "#f4f4f1", "theme_color": "#b3261e", "icons": []}
 
 # Old dashboards without the "no-inject" marker get this small panel added.
@@ -55,7 +57,7 @@ border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.25);padding:12px;z-index:99
 font:700 18px sans-serif;z-index:99999;display:none}
 </style>
 <div id="fd-banner">&#9888; FALL DETECTED</div>
-<div id="fd-panel"><h4>&#128247; Ảnh đã lưu khi phát hiện</h4><div id="fd-list">Chưa có ảnh nào.</div></div>
+<div id="fd-panel"><h4>&#128247; Saved fall snapshots</h4><div id="fd-list">No snapshots yet.</div></div>
 <script>
 (function(){
   function fmt(t){return new Date(t*1000).toLocaleString();}
@@ -86,10 +88,18 @@ class Streamer:
         self._explicit = Path(events_dir) if events_dir else None
         self._jpg, self._last_enc = None, 0.0
         self._alert_until, self._alert_text, self._box = 0.0, "", None
+        # Privacy view: when on, main.py sends a stick-figure picture instead of the camera
+        # image (live view, snapshots and clips). One shared setting for everyone watching.
+        self.privacy = False
+        # Demo overlays on the live feed only (snapshots and clips stay clean), switched
+        # from the monitor page: the phone acceleration graph and the skeleton.
+        self.demo = {"graph": False, "skeleton": False}
         self._closed = False
         self.config = {}
         self.routes = {}       # path -> handler(query) -> (status, content_type, body); GET and POST
         self.post_routes = {}  # path -> handler(query, body, headers) -> (status, content_type, body); POST only
+        self.routes["/api/privacy"] = self._privacy_route
+        self.routes["/api/demo"] = self._demo_route
         self.onboarding = None
         outer = self
 
@@ -150,6 +160,8 @@ class Streamer:
             def do_GET(self):
                 path, _, qs = self.path.partition("?")
                 try:
+                    if path in OLD_PATHS:  # links in notifications already sent, bookmarks
+                        return self._redirect(OLD_PATHS[path] + ("?" + qs if qs else ""))
                     if self._route():
                         return
                     if path in ("/", "/dashboard", "/dashboard.html", "/index.html"):
@@ -160,7 +172,7 @@ class Streamer:
                         if "no-inject" not in html:
                             html = html.replace("</body>", INJECT + "</body>", 1) if "</body>" in html else html + INJECT
                         return self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
-                    if path in ("/phone", "/phone.html"):
+                    if path in ("/monitor", "/monitor.html"):
                         if outer.onboarding is not None and not outer.onboarding.done() and "skip" not in parse_qs(qs):
                             return self._redirect("/onboarding")
                         f = outer._find(PHONE_PAGES, "phone.html")
@@ -216,7 +228,7 @@ class Streamer:
         self.server = ThreadingHTTPServer(("0.0.0.0", port), H)
         self.server.daemon_threads = True
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
-        print(f"[stream] dashboard -> http://localhost:{port}/   main screen -> /mainscreen   phone page -> /phone   onboarding -> /onboarding")
+        print(f"[stream] dashboard -> http://localhost:{port}/   main screen -> /mainscreen   monitor page -> /monitor   onboarding -> /onboarding")
         print(f"[stream] events folder -> {self.events_path() or '(not created yet)'}")
         try:  # onboarding is optional: the server still runs without onboarding.py
             from onboarding import Onboarding
@@ -224,6 +236,20 @@ class Streamer:
             print(f"[stream] onboarding data -> {HERE / 'data'}")
         except Exception as e:
             print(f"[stream] onboarding disabled: {e!r}")
+
+    def _demo_route(self, query):
+        """GET /api/demo -> {"graph": bool, "skeleton": bool}; POST ?graph=1&skeleton=0 sets them."""
+        for key in self.demo:
+            if key in query:
+                self.demo[key] = query[key] in ("1", "true", "on")
+        return 200, "application/json", json.dumps(self.demo).encode()
+
+    def _privacy_route(self, query):
+        """GET /api/privacy -> {"on": bool}; POST /api/privacy?on=1|0 switches it."""
+        if "on" in query:
+            self.privacy = query["on"] in ("1", "true", "on")
+            print(f"[stream] privacy view {'on' if self.privacy else 'off'}")
+        return 200, "application/json", json.dumps({"on": self.privacy}).encode()
 
     def add_route(self, path, handler):
         """Serve path (GET and POST) with handler(query) -> (status, content_type, body)."""

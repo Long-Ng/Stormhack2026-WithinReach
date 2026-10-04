@@ -96,17 +96,59 @@ def draw_cover(frame: np.ndarray, cover: CoverReset) -> None:
         draw_centered(frame, "RESET - uncover camera", h // 2, (0, 200, 0), 1.0)
 
 
-def draw_wearable(frame: np.ndarray, wearable: Wearable) -> None:
-    h, w = frame.shape[:2]
-    if not wearable.connected:
-        draw_text(frame, "phone OFFLINE", (w - 170, h - 20), WARN_COLOR, scale=0.55)
+GRAPH_S = 10.0  # seconds of phone acceleration shown in the graph
+GRAPH_LINE = (120, 230, 120)
+GRAPH_THRESH = (80, 160, 255)
+
+
+def draw_phone_graph(frame: np.ndarray, wearable: Wearable | None) -> None:
+    """The phone graph for the demo overlay; says so when no phone sensor is set up."""
+    if wearable is not None:
+        draw_wearable(frame, wearable)
         return
+    h, w = frame.shape[:2]
+    x0 = w - min(300, w // 2 - 20) - 10
+    frame[h - 60:h - 28, x0:w - 10] = (frame[h - 60:h - 28, x0:w - 10] * 0.3).astype(np.uint8)
+    draw_text(frame, "Phone sensor not connected", (x0 + 8, h - 38), WARN_COLOR, scale=0.5)
+
+
+def draw_wearable(frame: np.ndarray, wearable: Wearable) -> None:
+    """Scrolling graph of the phone's acceleration (Phyphox), bottom right: the last
+    GRAPH_S seconds, the impact threshold as a dashed line, detected impacts in red."""
+    h, w = frame.shape[:2]
+    gw, gh = min(300, w // 2 - 20), 110
+    x0, x1, y1 = w - gw - 10, w - 10, h - 34
+    y0 = y1 - gh
+    frame[y0 - 26:y1 + 6, x0:x1] = (frame[y0 - 26:y1 + 6, x0:x1] * 0.3).astype(np.uint8)  # dim panel
+    now = time.perf_counter()
+    if not wearable.connected:
+        draw_text(frame, "Phone (Phyphox): OFFLINE", (x0 + 8, y0 - 8), WARN_COLOR, scale=0.5)
+        return
+
+    thr = wearable.cfg.imu_impact_ms2
+    ymax = max(1.5 * thr, 1.0)
+
+    def xy(t: float, a: float) -> tuple[int, int]:
+        x = x0 + (1.0 - (now - t) / GRAPH_S) * (x1 - x0)
+        return int(x), int(y1 - min(a, ymax) / ymax * gh)
+
+    ty = xy(now, thr)[1]
+    for x in range(x0, x1, 12):  # dashed threshold line
+        cv2.line(frame, (x, ty), (min(x + 6, x1), ty), GRAPH_THRESH, 1, cv2.LINE_AA)
+    draw_text(frame, f"{thr / 9.81:.1f} g", (x0 + 4, ty - 4), GRAPH_THRESH, scale=0.4, thickness=1)
+
+    pts = [xy(t, a) for t, a in list(wearable.reader.samples) if now - t <= GRAPH_S]
+    if len(pts) > 1:
+        cv2.polylines(frame, [np.array(pts, np.int32)], False, GRAPH_LINE, 2, cv2.LINE_AA)
+    for hit in list(wearable.impact_log):
+        if now - hit.t <= GRAPH_S:
+            cv2.circle(frame, xy(hit.t, hit.peak), 6, WARN_COLOR, -1, cv2.LINE_AA)
+
     hit = wearable.last_impact
-    if hit is not None and time.perf_counter() - hit.t < 3.0:
-        draw_text(frame, f"IMPACT {hit.peak / 9.81:.1f} g", (w - 190, h - 20),
-                  WARN_COLOR, scale=0.7)
+    if hit is not None and now - hit.t < 3.0:
+        draw_text(frame, f"Phone: IMPACT {hit.peak / 9.81:.1f} g", (x0 + 8, y0 - 8), WARN_COLOR, scale=0.55)
     else:
-        draw_text(frame, f"phone {wearable.accel:4.1f} m/s2", (w - 190, h - 20), scale=0.55)
+        draw_text(frame, f"Phone (Phyphox) {wearable.accel:4.1f} m/s2", (x0 + 8, y0 - 8), scale=0.5)
 
 
 def draw_overlay(frame: np.ndarray, lms: Landmarks | None, feats: Features | None,
@@ -127,3 +169,34 @@ def draw_overlay(frame: np.ndarray, lms: Landmarks | None, feats: Features | Non
 
     h, w = frame.shape[:2]
     draw_text(frame, f"FPS {fps:5.1f}", (w - 130, 25))
+
+
+PRIVACY_BG = (46, 36, 30)        # dark slate (BGR)
+PRIVACY_LINE = (235, 225, 215)
+PRIVACY_JOINT = (120, 200, 255)
+
+
+def render_privacy_frame(shape: tuple, lms: Landmarks | None, min_visibility: float) -> np.ndarray:
+    """A stick-figure picture with no camera pixels: plain background, the (stabilized)
+    skeleton, and a round head. Used for the privacy view, its snapshots and clips."""
+    h, w = shape[:2]
+    frame = np.full((h, w, 3), PRIVACY_BG, np.uint8)
+    thick = max(3, round(w / 160))
+    if lms is not None:
+        visible = lms[:, 3] >= min_visibility
+        pts = lms[:, :2].astype(int)
+        for a, b in SKELETON:
+            if visible[a] and visible[b]:
+                cv2.line(frame, tuple(pts[a]), tuple(pts[b]), PRIVACY_LINE, thick, cv2.LINE_AA)
+        for i in JOINTS:
+            if visible[i] and i != 0:
+                cv2.circle(frame, tuple(pts[i]), thick + 2, PRIVACY_JOINT, -1, cv2.LINE_AA)
+        if visible[0]:
+            r = thick * 4
+            if visible[11] and visible[12]:  # head size from shoulder width
+                r = max(r, int(0.3 * np.linalg.norm(lms[11, :2] - lms[12, :2])))
+            cv2.circle(frame, tuple(pts[0]), r, PRIVACY_LINE, thick, cv2.LINE_AA)
+    else:
+        draw_text(frame, "No one in view", (16, h - 20), (170, 170, 170), scale=0.7)
+    draw_text(frame, "Privacy view", (w - 175, h - 20), (170, 170, 170), scale=0.6)
+    return frame

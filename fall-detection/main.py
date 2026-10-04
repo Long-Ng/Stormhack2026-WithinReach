@@ -11,13 +11,15 @@ python main.py --port 5050                            # dashboard server port (d
 python main.py --no-dashboard                         # do not start the dashboard server
 python main.py --ntfy my-secret-topic --name Nick     # extra phone push through the ntfy app
 
-While running: one responsive page for desktop, tablet and phone: http://<PC address>:5000/
+While running: desktop dashboard http://localhost:5000/ , main screen http://<PC address>:5000/mainscreen,
+               monitor page http://<PC address>:5000/monitor, person page http://<PC address>:5000/granny
 """
 
 from __future__ import annotations
 
 import argparse
 import contextlib
+import json
 import os
 import sys
 import time
@@ -25,16 +27,20 @@ import time
 import cv2
 
 from camera import open_source
-from alerts import open_alerts
+from alerts import lan_url, open_alerts
 from clips import ClipRecorder
 from config import Config
 from cover import CoverReset
 from detector import FallDetector, State
 from events import ConsoleSink, FallEvent, FileSink, dispatch, save_snapshot
 from features import FeatureExtractor, FeatureLogger
+from gemini import FallAnalyst, FrameHistory, GeminiClient, report_dict
+from zones import SceneScanner, SceneWatcher, ZoneStore, draw_zones
 from imu import open_wearable
-from overlay import draw_overlay, draw_skeleton
+from inject import KEYS as INJECT_KEYS, ClipInjector
+from overlay import draw_overlay, draw_phone_graph, draw_skeleton, draw_text, render_privacy_frame
 from pose import PoseEstimator
+from smoothing import SkeletonStabilizer
 
 WINDOW = "Fall Detection"
 
@@ -52,13 +58,15 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--params", metavar="TOML", default=None,
                    help="parameter file (default: params.toml next to main.py)")
     p.add_argument("--no-display", action="store_true", help="run headless")
+    p.add_argument("--inject", metavar="VIDEO_OR_FOLDER", default=None,
+                   help="demo: press I or Space in the camera window to play this clip as if it were live")
     p.add_argument("--port", type=int, default=5000, help="dashboard server port")
     p.add_argument("--no-dashboard", action="store_true", help="do not start the dashboard server")
     p.add_argument("--ntfy", metavar="TOPIC", default=os.environ.get("FALL_NTFY_TOPIC"),
                    help="ntfy topic for an extra phone push (or set env FALL_NTFY_TOPIC)")
     p.add_argument("--ntfy-server", default=os.environ.get("FALL_NTFY_SERVER", "https://ntfy.sh"),
                    help="ntfy server (default https://ntfy.sh)")
-    p.add_argument("--name", default="Nick", help="name of the monitored person (phone page + push)")
+    p.add_argument("--name", default="Your family member", help="name of the monitored person (phone page + push)")
     p.add_argument("--room", default="Living room", help="room name shown on the phone page")
     p.add_argument("--address", default="", help="home address shown on the phone page")
     p.add_argument("--phone", default="911", help="emergency number for the Call button")
@@ -100,6 +108,27 @@ def handle_detection(detection, frame, lms, cfg: Config, sinks, streamer=None,
             print(f"dashboard alert failed: {e!r}", file=sys.stderr)
 
 
+def start_phone_links(streamer, cfg: Config, port: int):
+    """QR codes and the within-reach.local name, so nobody types an IP address."""
+    if streamer is None:
+        return None
+    from phone_links import LocalName, connect_page, print_qr_codes, qr_png
+    base = (cfg.public_url or lan_url(port)).rstrip("/")
+    local = None
+    if cfg.mdns_name and not cfg.public_url:
+        local = LocalName(cfg.mdns_name, base.split("//")[1].split(":")[0], port)
+        if not local.start():
+            local = None
+    local_url = local.url if local else None
+    streamer.add_route("/connect", lambda q: (200, "text/html; charset=utf-8",
+                                              connect_page(base, local_url)))
+    streamer.add_route("/qr.png", lambda q: (200, "image/png", qr_png(
+        base + (q.get("path") if q.get("path") in ("/monitor", "/granny") else "/monitor"))))
+    print_qr_codes(base, local_url)
+    print(f"[phones] QR codes on screen: http://localhost:{port}/connect")
+    return local
+
+
 def start_dashboard(args, cfg: Config):
     """Start the dashboard/video server. Never lets a dashboard problem stop the detector."""
     try:
@@ -119,12 +148,28 @@ def main() -> int:
 
     source = open_source(args.source, cfg)
     cap, is_file = source.cap, source.is_file
+    injector = None
+    inject_base_ms = live_offset_ms = 0.0  # timeline bookkeeping for demo clips
+    last_ts_ms = -1.0
+    if args.inject:
+        if is_file:
+            print("[inject] only works with a live camera; ignoring --inject")
+        else:
+            try:
+                injector = ClipInjector(args.inject)
+                print(f"[inject] press I or Space in the camera window to play: "
+                      + ", ".join(c.name for c in injector.clips))
+            except FileNotFoundError as e:
+                print(f"[inject] {e}", file=sys.stderr)
     if not cap.isOpened():
         print(f"Could not open {source.label}", file=sys.stderr)
         return 1
     print(f"Using {source.label}")
 
     streamer = None if args.no_dashboard else start_dashboard(args, cfg)
+    local_name = start_phone_links(streamer, cfg, args.port)
+    if streamer is not None:
+        streamer.privacy = cfg.privacy_view
 
     fps = 0.0
     last_wall = time.perf_counter()
@@ -132,6 +177,8 @@ def main() -> int:
 
     extractor = FeatureExtractor(cfg)
     detector = FallDetector(cfg)
+    stabilizer = SkeletonStabilizer(cfg)  # calmer skeleton for display only
+    was_private = False
     cover = CoverReset(cfg) if cfg.cover_reset else None
     # Phone accelerometer; only for live sources, since its clock is the PC's.
     wearable = None if is_file else open_wearable(cfg)
@@ -155,6 +202,67 @@ def main() -> int:
             print(f"[notify] disabled: {e!r}", file=sys.stderr)
     recorder = ClipRecorder(cfg.events_dir, cfg.clip_pre_s, cfg.clip_tail_s, cfg.clip_max_after_s,
                             cfg.clip_max_width, cfg.clip_max_fps)
+    # Gemini fall analysis; its reports reach the monitor through the phone alerts.
+    history = analyst = None
+    gemini_key = cfg.gemini_api_key or os.environ.get("GEMINI_API_KEY", "")
+    if alerts is not None and (gemini_key or cfg.gemini_fake):
+        history = FrameHistory()
+        if cfg.gemini_fake:
+            from fake_gemini import FakeGeminiClient
+            first_client = update_client = FakeGeminiClient()
+        else:
+            first_client = GeminiClient(gemini_key, cfg.gemini_model,
+                                        fallback_models=(cfg.gemini_fallback_model,),
+                                        video_fps=cfg.gemini_video_fps)
+            update_client = GeminiClient(gemini_key, cfg.gemini_update_model)
+        analyst = FallAnalyst(
+            first_client,
+            update_client=update_client,
+            on_report=lambda inc_id, r, minutes, still: manager.add_report(
+                inc_id, report_dict(r, minutes, cfg.emergency_number, still)),
+            is_open=manager.is_open, update_s=cfg.gemini_update_s,
+            max_updates=int(cfg.gemini_max_minutes * 60 / cfg.gemini_update_s))
+        if streamer is not None and not cfg.gemini_fake:
+            streamer.set_config(gemini_falls=True)  # real Gemini sees fall clips: word Privacy view honestly
+        model = "preloaded demo answers, no API calls" if cfg.gemini_fake else             f"{cfg.gemini_model}; checks on {cfg.gemini_update_model}"
+        print(f"[gemini] fall analysis on ({model}), "
+              f"checks every {cfg.gemini_update_s:g} s for {cfg.gemini_max_minutes:g} min")
+    elif alerts is not None:
+        print("[gemini] off: set gemini_api_key in params.local.toml to describe falls")
+    if analyst is not None and streamer is not None:
+        def demo_speed(q):  # dashboard Fast Forward button: POST ?fast=1|0, GET reads it
+            if "fast" in q:
+                speed = cfg.demo_fast_speed if q["fast"] == "1" else 1.0
+                analyst.speed = manager.notify_speed = speed
+                print(f"[gemini] {'fast-forward on' if speed > 1 else 'normal speed'}", flush=True)
+            return 200, "application/json", json.dumps({"fast": analyst.speed > 1}).encode()
+        streamer.add_route("/api/demo/speed", demo_speed)
+
+    # Rest zones (bed, sofa): lying there is not a fall. Gemini finds them when it can.
+    zone_store = watcher = scanner = None
+    if cfg.rest_zones:
+        zone_store = ZoneStore(cfg.zones_file)
+        if gemini_key and not cfg.gemini_fake:
+            watcher = SceneWatcher(cfg.scene_empty_s, cfg.scene_change_frac, cfg.scene_change_s,
+                                   cfg.scene_min_interval_s, have_zones=bool(zone_store.zones))
+            scanner = SceneScanner(
+                GeminiClient(gemini_key, cfg.gemini_update_model).analyze_scene,
+                zone_store, watcher)
+            if streamer is not None:
+                streamer.set_config(gemini_scan=True)  # empty-room pictures go to Gemini
+        names = ", ".join(z.label for z in zone_store.zones) or "none yet"
+        print(f"[zones] rest zones: {names}"
+              + ("; Gemini rescans when the empty room changes" if scanner else
+                 "; add a Gemini key for automatic room scans"))
+        if streamer is not None:
+            streamer.add_route("/zones.json", lambda q: (
+                200, "application/json", json.dumps(zone_store.as_json()).encode()))
+
+    if not args.no_display:
+        # Resizable, so it can be enlarged for a demo screen; F toggles fullscreen.
+        cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(WINDOW, 960, 720)
+    fullscreen = False
 
     with contextlib.ExitStack() as stack:
         stack.callback(recorder.close)  # finish the clip in progress on exit
@@ -163,24 +271,32 @@ def main() -> int:
         estimator = stack.enter_context(PoseEstimator(cfg))
         logger = stack.enter_context(FeatureLogger(args.log_features)) if args.log_features else None
         while True:
-            ok, frame = cap.read()
+            if injector is not None and injector.active:
+                ok, frame = injector.read()
+                if not ok:  # clip finished
+                    print("[inject] clip ended: back to the live camera")
+                    extractor = FeatureExtractor(cfg)  # no fake jump across the switch
+                    live_offset_ms = last_ts_ms - (time.perf_counter() - start_wall) * 1000.0
+                    for _ in range(5):
+                        cap.grab()  # skip camera frames queued while the clip played
+                    ok, frame = cap.read()
+            else:
+                ok, frame = cap.read()
             if not ok:
                 break
             if alerts is not None:
                 manager.tick()  # escalate to the monitor when the person has not replied
 
-            # Clean frame for the dashboard: sent before any overlay is drawn on it.
-            if streamer is not None:
-                try:
-                    streamer.update(frame)
-                except Exception as e:
-                    print(f"[dashboard] update failed: {e!r}", file=sys.stderr)
-
-            # Video files use their own timestamps so replays are reproducible.
-            if is_file:
+            # Video files use their own timestamps so replays are reproducible; so does an
+            # injected demo clip (continuing from where the live clock was).
+            if injector is not None and injector.active:
+                ts_ms = inject_base_ms + injector.elapsed_ms
+            elif is_file:
                 ts_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
             else:
-                ts_ms = (time.perf_counter() - start_wall) * 1000.0
+                ts_ms = (time.perf_counter() - start_wall) * 1000.0 + live_offset_ms
+            ts_ms = max(ts_ms, last_ts_ms + 1.0)  # strictly increasing across switches
+            last_ts_ms = ts_ms
 
             # Cover the lens for cover_reset_s to start detection over.
             if cover is not None and cover.update(frame, ts_ms / 1000.0):
@@ -188,8 +304,39 @@ def main() -> int:
                 detector = FallDetector(cfg)
                 print("Reset (camera covered)")
 
+            if history is not None:
+                history.add(frame, ts_ms / 1000.0)  # clean frame, before any overlay
             lms = estimator.process(frame, ts_ms)
+            shown_lms = stabilizer.update(lms, ts_ms / 1000.0)  # drawing only; detection uses lms
+            # What the monitor may see: the camera picture, or in Privacy view a stick figure
+            # with no camera pixels (live view, snapshots and clips alike).
+            private = streamer is not None and streamer.privacy
+            if private and not was_private:
+                recorder.clear_preroll()  # no camera footage from before the switch in clips
+            was_private = private
+            view = render_privacy_frame(frame.shape, shown_lms, cfg.min_visibility) if private else frame
+            if streamer is not None:  # clean frame, before the debug overlay is drawn
+                try:
+                    live = view
+                    if streamer.demo["graph"] or streamer.demo["skeleton"]:
+                        live = view.copy()  # demo overlays: live feed only, not snapshots or clips
+                        if streamer.demo["skeleton"] and not private and shown_lms is not None:
+                            draw_skeleton(live, shown_lms, cfg.min_visibility)
+                        if streamer.demo["graph"]:
+                            draw_phone_graph(live, wearable)
+                    streamer.update(live)
+                except Exception as e:
+                    print(f"[dashboard] update failed: {e!r}", file=sys.stderr)
             feats = extractor.update(lms, ts_ms / 1000.0)
+            rest_zone = None
+            if zone_store is not None:
+                if feats is not None:
+                    rest_zone = zone_store.zone_at(feats.shoulder_xy, feats.hip_xy,
+                                                   (frame.shape[1], frame.shape[0]))
+                detector.in_rest_zone = rest_zone is not None
+                if watcher is not None and watcher.update(frame, ts_ms / 1000.0, lms is not None):
+                    watcher.scanned(frame, ts_ms / 1000.0)
+                    scanner.start(frame)  # clean frame: no overlay drawn yet
             phone_still = None
             if wearable is not None:
                 for hit in wearable.poll():
@@ -201,9 +348,16 @@ def main() -> int:
             if detection is not None:
                 if detection.sensor:
                     print("(confirmed with phone sensor)")
-                handle_detection(detection, frame, lms, cfg, sinks, streamer, recorder)
+                # Privacy view: the snapshot is the stick figure too (it already has the skeleton).
+                handle_detection(detection, view, None if private else lms, cfg, sinks, streamer, recorder)
+                if analyst is not None and manager.last_incident_id:
+                    analyst.start(manager.last_incident_id, history, ts_ms / 1000.0)
+            if analyst is not None:
+                if detector.state is State.UPRIGHT:
+                    analyst.stop()  # back up: no more updates
+                analyst.tick(history, ts_ms / 1000.0)
             # Clean frame (no overlay yet); the clip runs until the person is back up.
-            recorder.add(frame, ts_ms / 1000.0, detector.state is not State.UPRIGHT)
+            recorder.add(view, ts_ms / 1000.0, detector.state is not State.UPRIGHT)
 
             # Keep the dashboard alert (and the red box around the person) on while the fall stays confirmed.
             if streamer is not None:
@@ -223,11 +377,32 @@ def main() -> int:
             fps = inst if fps == 0.0 else cfg.fps_smoothing * fps + (1 - cfg.fps_smoothing) * inst
 
             if not args.no_display:
-                draw_overlay(frame, lms, feats, detector, fps, cfg.min_visibility, cover, wearable)
+                draw_overlay(frame, shown_lms, feats, detector, fps, cfg.min_visibility, cover, wearable)
+                if zone_store is not None:
+                    draw_zones(frame, zone_store.zones, rest_zone)
+                if injector is not None and injector.active:  # this window only, not the dashboard
+                    draw_text(frame, f"DEMO CLIP: {injector.name}", (frame.shape[1] // 2 - 140, 30),
+                              (0, 0, 255), scale=0.7)
                 cv2.imshow(WINDOW, frame)
                 key = cv2.waitKey(1) & 0xFF
                 if key in (ord("q"), 27):  # q or Esc
                     break
+                if key in (ord("f"), ord("F")):
+                    fullscreen = not fullscreen
+                    cv2.setWindowProperty(WINDOW, cv2.WND_PROP_FULLSCREEN,
+                                          cv2.WINDOW_FULLSCREEN if fullscreen else cv2.WINDOW_NORMAL)
+                if key in INJECT_KEYS:
+                    if injector is None:
+                        print("[inject] start main.py with --inject <video or folder> to use I / Space")
+                    else:
+                        print(f"[inject] {injector.toggle()}")
+                        extractor = FeatureExtractor(cfg)  # no fake jump across the switch
+                        if injector.active:
+                            inject_base_ms = last_ts_ms + 1.0
+                        else:
+                            live_offset_ms = last_ts_ms - (time.perf_counter() - start_wall) * 1000.0
+                            for _ in range(5):
+                                cap.grab()
                 if cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) < 1:
                     break  # window closed with the X button
 
@@ -235,6 +410,8 @@ def main() -> int:
         wearable.close()
     if streamer is not None:
         streamer.close()
+    if local_name is not None:
+        local_name.close()
     cap.release()
     cv2.destroyAllWindows()
     return 0
