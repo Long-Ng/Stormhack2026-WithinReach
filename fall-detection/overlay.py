@@ -145,8 +145,10 @@ def draw_wearable(frame: np.ndarray, wearable: Wearable) -> None:
             cv2.circle(frame, xy(hit.t, hit.peak), 6, WARN_COLOR, -1, cv2.LINE_AA)
 
     hit = wearable.last_impact
-    if hit is not None and now - hit.t < 3.0:
-        draw_text(frame, f"Phone: IMPACT {hit.peak / 9.81:.1f} g", (x0 + 8, y0 - 8), WARN_COLOR, scale=0.55)
+    if hit is not None and now - hit.t <= wearable.cfg.imu_suspect_s:
+        draw_text(frame, f"FALL SUSPECTED - phone shock {hit.peak / 9.81:.1f} g", (x0 + 8, y0 - 8),
+                  WARN_COLOR, scale=0.5)
+        draw_centered(frame, "FALL SUSPECTED", 80, WARN_COLOR, 1.1)  # big, top centre
     else:
         draw_text(frame, f"Phone (Phyphox) {wearable.accel:4.1f} m/s2", (x0 + 8, y0 - 8), scale=0.5)
 

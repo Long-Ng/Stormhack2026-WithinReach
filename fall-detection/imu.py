@@ -95,8 +95,12 @@ class Wearable:
             return {"available": False, "reason": "Phone sensor (Phyphox) offline"}
         samples = [[round(now - t, 3), round(a, 2)] for t, a in list(self.reader.samples) if now - t <= seconds]
         impacts = [[round(now - h.t, 3), round(h.peak, 2)] for h in list(self.impact_log) if now - h.t <= seconds]
+        hit = self.last_impact
+        suspect = (None if hit is None or now - hit.t > self.cfg.imu_suspect_s
+                   else {"age": round(now - hit.t, 1), "g": round(hit.peak / 9.81, 1)})
         return {"available": True, "seconds": seconds, "threshold": self.cfg.imu_impact_ms2,
-                "accel": round(self.accel, 2), "samples": samples, "impacts": impacts}
+                "accel": round(self.accel, 2), "samples": samples, "impacts": impacts,
+                "suspect": suspect}  # latest phone shock within imu_suspect_s, or None
 
     def close(self) -> None:
         self.reader.stop()

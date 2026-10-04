@@ -51,3 +51,27 @@ def test_graph_data_for_dashboard():
 def test_graph_data_offline():
     d = Wearable(Reader(connected=False), Config()).graph()
     assert d["available"] is False and "offline" in d["reason"]
+
+
+def test_shock_marks_fall_suspected_for_a_while():
+    r = Reader(); w = Wearable(r, Config(imu_impact_ms2=20.0, imu_suspect_s=10.0))
+    now = time.perf_counter()
+    w._last_t = now - 6
+    for i in range(250):
+        r.samples.append((now - 5 + i / 50, 25.0 if i == 100 else 0.5))  # shock 3 s ago
+    w.poll()
+    g = w.graph(now=now)
+    assert g["suspect"] == {"age": 3.0, "g": 2.5}
+    assert w.graph(now=now + 8)["suspect"] is None  # 11 s later: cleared
+
+
+def test_window_says_fall_suspected_after_a_shock():
+    r = Reader(); w = Wearable(r, Config(imu_impact_ms2=20.0))
+    now = time.perf_counter()
+    w._last_t = now - 2
+    r.samples.extend([(now - 1.0, 25.0), (now - 0.9, 0.3)])
+    w.poll()
+    frame = np.zeros((480, 640, 3), np.uint8)
+    draw_wearable(frame, w)
+    top = frame[50:100, 150:490]  # big red "FALL SUSPECTED" near the top centre
+    assert ((top[..., 2] > 200) & (top[..., 1] < 80)).sum() > 200
