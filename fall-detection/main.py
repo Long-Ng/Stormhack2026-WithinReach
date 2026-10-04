@@ -35,6 +35,7 @@ from features import FeatureExtractor, FeatureLogger
 from imu import open_wearable
 from overlay import draw_overlay, draw_skeleton
 from pose import PoseEstimator
+from smoothing import SkeletonStabilizer
 
 WINDOW = "Fall Detection"
 
@@ -132,6 +133,7 @@ def main() -> int:
 
     extractor = FeatureExtractor(cfg)
     detector = FallDetector(cfg)
+    stabilizer = SkeletonStabilizer(cfg)  # calmer skeleton for display only
     cover = CoverReset(cfg) if cfg.cover_reset else None
     # Phone accelerometer; only for live sources, since its clock is the PC's.
     wearable = None if is_file else open_wearable(cfg)
@@ -189,6 +191,7 @@ def main() -> int:
                 print("Reset (camera covered)")
 
             lms = estimator.process(frame, ts_ms)
+            shown_lms = stabilizer.update(lms, ts_ms / 1000.0)  # drawing only; detection uses lms
             feats = extractor.update(lms, ts_ms / 1000.0)
             phone_still = None
             if wearable is not None:
@@ -223,7 +226,7 @@ def main() -> int:
             fps = inst if fps == 0.0 else cfg.fps_smoothing * fps + (1 - cfg.fps_smoothing) * inst
 
             if not args.no_display:
-                draw_overlay(frame, lms, feats, detector, fps, cfg.min_visibility, cover, wearable)
+                draw_overlay(frame, shown_lms, feats, detector, fps, cfg.min_visibility, cover, wearable)
                 cv2.imshow(WINDOW, frame)
                 key = cv2.waitKey(1) & 0xFF
                 if key in (ord("q"), 27):  # q or Esc
