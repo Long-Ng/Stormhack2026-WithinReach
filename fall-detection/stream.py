@@ -53,7 +53,7 @@ border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.25);padding:12px;z-index:99
 font:700 18px sans-serif;z-index:99999;display:none}
 </style>
 <div id="fd-banner">&#9888; FALL DETECTED</div>
-<div id="fd-panel"><h4>&#128247; Ảnh đã lưu khi phát hiện</h4><div id="fd-list">Chưa có ảnh nào.</div></div>
+<div id="fd-panel"><h4>&#128247; Saved fall snapshots</h4><div id="fd-list">No snapshots yet.</div></div>
 <script>
 (function(){
   function fmt(t){return new Date(t*1000).toLocaleString();}
