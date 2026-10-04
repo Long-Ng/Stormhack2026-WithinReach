@@ -60,6 +60,17 @@ class Config:
     cover_max_brightness: float = 40.0  # mean pixel value 0-255
     cover_max_std: float = 12.0  # largest per-channel std; a covered lens is a flat blur
 
+    # Wearable accelerometer (Phyphox remote access); live sources only, not file replays
+    imu_url: str = ""  # e.g. "http://172.16.164.134:8080"; empty = no wearable
+    imu_poll_s: float = 0.05  # how often to fetch new samples
+    imu_timeout_s: float = 2.0  # HTTP timeout per request
+    imu_impact_ms2: float = 20.0  # departure from rest counted as an impact (~2 g)
+    imu_refractory_s: float = 1.0  # one impact per bounce sequence
+    imu_match_s: float = 2.0  # impact this close to the camera's fall counts as the same fall
+    imu_hold_s: float = 10.0  # an unmatched impact is forgotten after this long
+    imu_still_ms2: float = 1.5  # phone below this is "still"
+    imu_still_s: float = 3.0  # impact + phone still this long + person unseen/down -> sensor_fall
+
     # Events
     events_dir: str = str(Path(__file__).parent / "events")  # events.jsonl, snapshots, clips
     clip_pre_s: float = 30.0  # video kept from before the fall is confirmed

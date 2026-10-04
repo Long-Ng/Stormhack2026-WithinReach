@@ -53,6 +53,20 @@ cover_reset_s = 3.0          # seconds covered before resetting
 cover_max_brightness = 40.0  # mean pixel value 0-255
 cover_max_std = 12.0         # texture; a covered lens is a flat blur
 
+[imu]
+# Phone accelerometer via Phyphox: experiment "Acceleration (without g)",
+# menu > Allow remote access. Test with: python imu.py
+# Set imu_url = "" to run camera only. Ignored when replaying a video file.
+imu_url = "http://172.16.164.134:8080"
+imu_poll_s = 0.05
+imu_timeout_s = 2.0
+imu_impact_ms2 = 20.0     # m/s^2 above rest (~2 g); a hard fall is usually higher
+imu_refractory_s = 1.0    # ignore further spikes this long after an impact
+imu_match_s = 2.0         # impact within this of the camera's fall -> confirm immediately
+imu_hold_s = 10.0         # forget an unmatched impact after this long
+imu_still_ms2 = 1.5       # phone below this counts as still
+imu_still_s = 3.0         # impact, then phone still this long, person unseen or down -> sensor_fall
+
 [events]
 events_dir = "events"     # events.jsonl, snapshot .jpg and clip .mp4 files, relative to this file
 # Each event saves an .mp4: clip_pre_s before the confirmation, then everything after

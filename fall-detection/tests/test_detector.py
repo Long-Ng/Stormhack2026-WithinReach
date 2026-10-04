@@ -130,3 +130,32 @@ def test_jitter_longer_than_grace_resets_stillness():
     det, events = run([(1, STAND), (0.3, DROP), (2, LYING), (0.6, twitch), (2, LYING)],
                       Config(still_grace_s=0.5))
     assert events == []
+
+
+# Upper body only (ankles out of frame): hip_h unknown, shoulders make the bbox wide.
+DESK = dict(angle=10.0, peak=0.0, aspect=1.5, hip_h=None, motion=0.05)
+
+
+def test_upper_body_only_with_camera_shake_no_event():
+    # The 13:05 false alarm: someone at a desk, a jolt reads as a fast drop.
+    shake = DESK | {"peak": 3.0, "motion": 2.0}
+    det, events = run([(1, DESK), (0.3, shake), (20, DESK)])
+    assert events == []
+    assert det.state is State.UPRIGHT
+
+
+def test_upper_body_only_long_sit_no_prolonged_lying():
+    det, events = run([(20, DESK)])
+    assert events == []
+
+
+def test_fall_with_ankles_hidden_still_detected_by_torso_angle():
+    lying_no_ankles = LYING | {"hip_h": None}
+    det, events = run([(1, STAND), (0.3, DROP), (4, lying_no_ankles)])
+    assert [e.kind for e in events] == ["fall"]
+
+
+def test_ankles_hidden_wide_but_upright_torso_is_not_down():
+    det = FallDetector(Config())
+    assert not det.is_down(feats(0.0, **DESK))
+    assert det.is_down(feats(0.0, **(DESK | {"angle": 80.0})))
