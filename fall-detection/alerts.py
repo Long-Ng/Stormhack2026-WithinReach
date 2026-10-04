@@ -329,7 +329,7 @@ class AlertManager:
                         f"Otherwise your contact is alerted in {self.cfg.reply_timeout_s:.0f} s."),
             "priority": 5,
             "tags": ["rotating_light"],
-            "click": f"{self.base_url}/granny?id={quote(inc.id)}",
+            "click": f"{self.base_url}/?id={quote(inc.id)}#fall",  # "Are you OK?" screen in index.html
             "actions": actions,
         }
 
