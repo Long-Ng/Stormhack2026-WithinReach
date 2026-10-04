@@ -182,6 +182,8 @@ def main() -> int:
     cover = CoverReset(cfg) if cfg.cover_reset else None
     # Phone accelerometer; only for live sources, since its clock is the PC's.
     wearable = None if is_file else open_wearable(cfg)
+    if wearable is not None and streamer is not None:  # dashboard graph under the live video
+        streamer.add_route("/api/phone", lambda q: (200, "application/json", json.dumps(wearable.graph()).encode()))
     # Add new alert channels here; nothing else needs to change.
     sinks = [ConsoleSink(), FileSink(cfg.events_dir)]
     # Phone alerts: person first, then the monitor. Replies arrive on the dashboard server.

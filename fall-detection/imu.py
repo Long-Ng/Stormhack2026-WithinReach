@@ -88,6 +88,16 @@ class Wearable:
     def still_for(self, now: float) -> float:
         return 0.0 if self._still_since is None else max(now - self._still_since, 0.0)
 
+    def graph(self, seconds: float = 10.0, now: float | None = None) -> dict:
+        """The last `seconds` of acceleration for the dashboard graph, as ages in seconds."""
+        now = time.perf_counter() if now is None else now
+        if not self.connected:
+            return {"available": False, "reason": "Phone sensor (Phyphox) offline"}
+        samples = [[round(now - t, 3), round(a, 2)] for t, a in list(self.reader.samples) if now - t <= seconds]
+        impacts = [[round(now - h.t, 3), round(h.peak, 2)] for h in list(self.impact_log) if now - h.t <= seconds]
+        return {"available": True, "seconds": seconds, "threshold": self.cfg.imu_impact_ms2,
+                "accel": round(self.accel, 2), "samples": samples, "impacts": impacts}
+
     def close(self) -> None:
         self.reader.stop()
 

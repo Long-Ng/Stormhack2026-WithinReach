@@ -34,6 +34,13 @@ main{flex:1;padding:26px 28px;max-width:1260px}
 .timer b{font-size:36px;font-variant-numeric:tabular-nums}
 .banner.ok .timer{display:none}
 .grid{display:grid;grid-template-columns:1fr 400px;gap:22px}
+.vcol{display:flex;flex-direction:column;gap:16px;min-width:0}
+.pgraph{flex:1;display:flex;flex-direction:column;min-height:170px;padding:14px 20px 16px}
+.pgraph .head{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}.pgraph h3{margin:0;font-size:16px}
+.pgraph .now{margin-left:auto;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.pgraph .plot{flex:1;position:relative;min-height:110px}
+.pgraph canvas{position:absolute;inset:0;width:100%;height:100%}
+.pgraph .na{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:var(--muted);font-size:14px;background:#f7f8f5;border-radius:12px}
 .card{background:var(--card);border-radius:20px;padding:20px}
 .card h3{margin:0 0 14px;font-size:20px}
 .video{background:#1f2a28;border-radius:22px;position:relative;overflow:hidden;aspect-ratio:16/9;display:grid;place-items:center}
@@ -78,7 +85,7 @@ main{flex:1;padding:26px 28px;max-width:1260px}
 .ai small{display:block;color:var(--muted);font-size:11px;margin-top:6px}
 .ff{align-self:flex-start;margin:10px 0 12px;border:1px solid var(--amberln);background:#fff;color:#7a4c00;border-radius:10px;padding:6px 12px;font-weight:700;font-size:13px;cursor:pointer}
 .ff.on{background:#7a4c00;color:#fff;border-color:#7a4c00}
-.demobar{display:flex;gap:10px;flex-wrap:wrap;margin:-8px 0 18px}.demobar .ff{margin:0}
+.demobar{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 18px}.demobar .ff{margin:0}
 .shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}
 .shot{background:#f3f4f1;border-radius:14px;overflow:hidden;font-size:13px}
 .shot img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}
@@ -118,11 +125,17 @@ td img{width:90px;border-radius:8px;display:block}
 
   <section class="view show" id="v-dash">
     <div class="grid">
+      <div class="vcol">
       <div class="video">
         <span class="chip live"><i></i>LIVE</span><span class="chip time" id="clock">--:--:--</span>
         <img id="cam" alt="Live camera">
         <div class="vmsg" id="vmsg">Waiting for video from main.py...</div>
         <span class="chip tag" id="vtag"></span>
+      </div>
+      <div class="card pgraph">
+        <div class="head"><h3>Phone motion (Phyphox)</h3><span class="now" id="pgNow"></span></div>
+        <div class="plot"><canvas id="pgCanvas"></canvas><div class="na" id="pgNa">Phone graph unavailable</div></div>
+      </div>
       </div>
       <div>
         <div class="card" style="margin-bottom:22px">
@@ -348,6 +361,46 @@ td img{width:90px;border-radius:8px;display:block}
   $("graphBtn").onclick = function(){ toggleDemo("graph", this); };
   $("skelBtn").onclick = function(){ toggleDemo("skeleton", this); };
   loadDemo(); setInterval(loadDemo, 5000);  // the phone page may switch them too
+
+  // Phone acceleration (Phyphox) under the live video: the last 10 s, the impact
+  // threshold dashed, detected impacts in red. Says "unavailable" when there is no data.
+  function phoneNa(text){
+    $("pgNa").textContent = text; $("pgNa").style.display = "grid"; $("pgNow").textContent = "";
+  }
+  function drawPhone(d){
+    if(!d || !d.available){ phoneNa("Phone graph unavailable" + (d && d.reason ? " · " + d.reason : "")); return; }
+    if(!d.samples.length){ phoneNa("Phone graph unavailable · waiting for data from the phone"); return; }
+    $("pgNa").style.display = "none";
+    $("pgNow").textContent = (d.accel / 9.81).toFixed(2) + " g now";
+    var c = $("pgCanvas"), dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+    if(c.width !== Math.round(w*dpr) || c.height !== Math.round(h*dpr)){ c.width = Math.round(w*dpr); c.height = Math.round(h*dpr); }
+    var g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+    var L = 34, B = h - 16, T = 6, ymax = Math.max(1.5 * d.threshold, 1);
+    d.samples.concat(d.impacts).forEach(function(p){ if(p[1] > ymax) ymax = p[1]; });
+    function X(age){ return L + (1 - age / d.seconds) * (w - L); }
+    function Y(a){ return B - Math.min(a, ymax) / ymax * (B - T); }
+    g.font = "11px DM Sans, system-ui, sans-serif"; g.fillStyle = "#5d6b66"; g.strokeStyle = "#e7e9e4"; g.lineWidth = 1;
+    for(var gv = 0; gv <= ymax / 9.81; gv += ymax > 40 ? 2 : 1){  // gridlines every 1 g (2 g when tall)
+      var gy = Math.round(Y(gv * 9.81)) + .5;
+      g.beginPath(); g.moveTo(L, gy); g.lineTo(w, gy); g.stroke(); g.fillText(gv + " g", 0, gy + 4);
+    }
+    g.fillText("-" + d.seconds + " s", L, h - 2); g.fillText("now", w - 22, h - 2);
+    g.setLineDash([5, 5]); g.strokeStyle = "#c27a0e"; g.beginPath();
+    g.moveTo(L, Y(d.threshold)); g.lineTo(w, Y(d.threshold)); g.stroke(); g.setLineDash([]);
+    g.strokeStyle = "#14532d"; g.lineWidth = 2; g.lineJoin = "round"; g.beginPath();
+    d.samples.forEach(function(p, i){ var x = X(p[0]), y = Y(p[1]); if(i) g.lineTo(x, y); else g.moveTo(x, y); });
+    g.stroke();
+    g.fillStyle = "#b42318";
+    d.impacts.forEach(function(p){ g.beginPath(); g.arc(X(p[0]), Y(p[1]), 5, 0, 2*Math.PI); g.fill(); });
+  }
+  var phoneBusy = false;
+  function pollPhone(){
+    if(phoneBusy) return; phoneBusy = true;
+    fetch("/api/phone",{cache:"no-store"}).then(function(r){return r.json();}).then(drawPhone)
+      .catch(function(){ phoneNa("Phone graph unavailable · no connection to main.py"); })
+      .then(function(){ phoneBusy = false; });
+  }
+  pollPhone(); setInterval(pollPhone, 250);
 
   setInterval(function(){
     $("clock").textContent = new Date().toLocaleTimeString([], {hour:"numeric", minute:"2-digit", second:"2-digit"});

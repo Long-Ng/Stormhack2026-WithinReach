@@ -100,6 +100,9 @@ class Streamer:
         self.post_routes = {}  # path -> handler(query, body, headers) -> (status, content_type, body); POST only
         self.routes["/api/privacy"] = self._privacy_route
         self.routes["/api/demo"] = self._demo_route
+        # Phone acceleration graph data; main.py replaces this when a phone sensor is set up.
+        self.routes["/api/phone"] = lambda q: (200, "application/json",
+                                               b'{"available": false, "reason": "No phone sensor set up"}')
         self.onboarding = None
         outer = self
 
