@@ -33,6 +33,15 @@ from events import FallEvent
 
 PERSON_PAGE = Path(__file__).parent / "person.html"
 
+# Quick messages on the person page: key -> (text, means the person needs help)
+QUICK_MESSAGES = {
+    "cant_get_up": ("I can't get up", True),
+    "hurt": ("I'm hurt", True),
+    "call_me": ("Please call me", True),
+    "ok_now": ("I'm OK now", False),
+}
+VOICE_TYPES = {"webm": "audio/webm", "ogg": "audio/ogg", "mp4": "audio/mp4"}
+
 # Incident status
 WAITING = "waiting"     # person notified, no reply yet
 OK = "ok"               # person said they are fine
@@ -99,6 +108,8 @@ class AlertManager:
         self.publish = publish
         self.clock = clock
         self.incidents: dict[str, Incident] = {}
+        self.messages: list[dict] = []  # person -> monitor: {"t", "kind", "text", "file"}
+        self.voice_dir = Path(cfg.events_dir) / "voice"
         self._lock = threading.Lock()  # replies arrive on the server's threads
 
     # --- AlertSink -----------------------------------------------------------------
@@ -150,7 +161,86 @@ class AlertManager:
             "/respond": self._route_respond,
             "/incidents.json": self._route_incidents,
             "/person": self._route_person,
+            "/message": self._route_message,
+            "/voice": self._route_voice,
+            "/messages.json": self._route_messages,
         }
+
+    def upload_routes(self) -> dict:
+        """Routes that need the request body: handler(query, body)."""
+        return {"/talk": self._route_talk}
+
+    # --- person -> monitor communication --------------------------------------------
+    def send_message(self, key: str, incident_id: str = "") -> str:
+        if key not in QUICK_MESSAGES:
+            return "unknown message"
+        text, needs_help = QUICK_MESSAGES[key]
+        self._mark(incident_id, HELP if needs_help else OK)
+        self._log("text", text)
+        self.publish({
+            "topic": self.cfg.ntfy_monitor_topic,
+            "title": f"Message - {self.cfg.room_name}",
+            "message": f'The person says: "{text}" ({_hhmm(self.clock())})',
+            "priority": 5 if needs_help else 3,
+            "tags": ["speech_balloon"],
+            "click": f"{self.base_url}/",
+        })
+        return "Sent"
+
+    def save_voice(self, audio: bytes, ext: str, incident_id: str = "") -> str:
+        if ext not in VOICE_TYPES:
+            return "unsupported audio type"
+        if len(audio) < 100:
+            return "recording was empty"
+        self.voice_dir.mkdir(parents=True, exist_ok=True)
+        name = "voice-" + datetime.fromtimestamp(self.clock()).strftime("%Y%m%d-%H%M%S-%f")[:-3]
+        name = f"{name}.{ext}"
+        (self.voice_dir / name).write_bytes(audio)
+        self._mark(incident_id, HELP)  # talking after a fall: treat as needing attention
+        self._log("voice", "Voice message", name)
+        url = f"{self.base_url}/voice?f={quote(name)}"
+        self.publish({
+            "topic": self.cfg.ntfy_monitor_topic,
+            "title": f"Voice message - {self.cfg.room_name}",
+            "message": f"The person sent a voice message ({_hhmm(self.clock())}). Tap to listen.",
+            "priority": 5,
+            "tags": ["speaking_head"],
+            "click": url,
+            "actions": [{"action": "view", "label": "Listen", "url": url}],
+        })
+        return "Sent"
+
+    def _mark(self, incident_id: str, status: str) -> None:
+        """Update an open incident from a message, without a second "help" notification."""
+        with self._lock:
+            inc = self.incidents.get(incident_id)
+            if inc is not None and inc.status != status:
+                inc.status, inc.replied_t = status, self.clock()
+
+    def _log(self, kind: str, text: str, file: str | None = None) -> None:
+        with self._lock:
+            self.messages.append({"t": self.clock(), "kind": kind, "text": text, "file": file})
+
+    def _route_message(self, q):
+        msg = self.send_message(q.get("key", ""), q.get("id", ""))
+        return (200 if msg == "Sent" else 400), "text/plain; charset=utf-8", msg.encode()
+
+    def _route_talk(self, q, body):
+        msg = self.save_voice(body, q.get("ext", "webm"), q.get("id", ""))
+        return (200 if msg == "Sent" else 400), "text/plain; charset=utf-8", msg.encode()
+
+    def _route_voice(self, q):
+        name = Path(q.get("f", "")).name  # no directories: only files in voice_dir
+        f = self.voice_dir / name
+        ext = f.suffix.lstrip(".")
+        if not name or ext not in VOICE_TYPES or not f.is_file():
+            return 404, "text/plain", b"not found"
+        return 200, VOICE_TYPES[ext], f.read_bytes()
+
+    def _route_messages(self, q):
+        with self._lock:
+            items = list(self.messages)
+        return 200, "application/json", json.dumps({"now": self.clock(), "messages": items}).encode()
 
     def _route_respond(self, q):
         msg = self.respond(q.get("id", ""), q.get("answer", ""))
@@ -256,6 +346,8 @@ def demo() -> int:
     streamer = Streamer(port=port, events_dir=cfg.events_dir)
     for path, handler in manager.routes().items():
         streamer.add_route(path, handler)
+    for path, handler in manager.upload_routes().items():
+        streamer.add_route(path, handler, body=True)
     snaps = sorted(Path(cfg.events_dir).glob("*.jpg"), key=lambda p: p.stat().st_mtime)
     manager.send(FallEvent(timestamp=time.time(), kind="fall", peak_hip_vel=3.0,
                            torso_angle=95.0, snapshot_path=str(snaps[-1]) if snaps else None,

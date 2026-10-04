@@ -161,7 +161,11 @@ class FallDetector:
             return self._update_falling(feats, t, down)
 
         if self.state is State.ON_GROUND:
-            if down and feats.motion < cfg.still_motion:
+            # Entering ON_GROUND needs is_down(); staying there only needs "not back
+            # upright", so someone lying at an odd angle to the camera keeps the stillness
+            # timer running. Getting up is handled by the recovery rule above.
+            on_ground = down or feats.torso_angle >= cfg.ground_hold_angle
+            if on_ground and feats.motion < cfg.still_motion:
                 self.still_time += dt
                 self._unsteady_time = 0.0
             else:

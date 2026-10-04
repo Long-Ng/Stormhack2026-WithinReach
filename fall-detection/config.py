@@ -49,6 +49,7 @@ class Config:
     still_motion: float = 0.3  # torso lengths/s
     confirm_s: float = 3.0  # stillness on the ground before confirming
     still_grace_s: float = 0.5  # unsteady frames shorter than this pause the stillness timer instead of resetting it
+    ground_hold_angle: float = 30.0  # while ON_GROUND, a torso tilted at least this much still counts as down
     upright_angle: float = 30.0  # degrees
     recover_s: float = 1.0  # upright time to reset to UPRIGHT
     lost_grace_s: float = 1.0  # pose-loss tolerance while down

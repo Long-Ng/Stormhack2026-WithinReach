@@ -47,6 +47,7 @@ confirm_s = 3.0           # seconds of stillness before the fall is confirmed
 still_grace_s = 0.5       # movement shorter than this pauses the timer instead of resetting it
 
 # Recovery and pose loss
+ground_hold_angle = 30.0  # once ON_GROUND, a torso tilted at least this much still counts as down
 upright_angle = 30.0      # torso angle counted as upright (upside down is not upright)
 recover_s = 1.0           # seconds upright to go back to UPRIGHT
 lost_grace_s = 1.0        # pose lost while down: hold this long, then count as still

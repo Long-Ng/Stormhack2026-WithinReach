@@ -1,4 +1,5 @@
 import json
+import urllib.error
 import urllib.request
 
 import pytest
@@ -125,5 +126,74 @@ def test_routes_over_real_server(tmp_path):
         page = urllib.request.urlopen(f"{base}/person?id={inc_id}").read().decode()
         assert "tel:+15550001111" in page and "{{CALL_NUMBER}}" not in page
         assert urllib.request.urlopen(base + "/events.json").status == 200  # old routes intact
+    finally:
+        s.close()
+
+
+def test_quick_message_notifies_monitor_and_marks_help():
+    m, sent, _ = make()
+    m.send(fall())
+    inc = only_incident(m)
+    assert m.send_message("cant_get_up", inc.id) == "Sent"
+    assert sent[-1]["topic"] == "monitor-x" and "I can't get up" in sent[-1]["message"]
+    assert inc.status == HELP
+    assert m.send_message("nonsense", inc.id) == "unknown message"
+    assert [x["text"] for x in m.messages] == ["I can't get up"]
+
+
+def test_help_message_stops_the_no_reply_escalation():
+    m, sent, clock = make()
+    m.send(fall())
+    m.send_message("hurt", only_incident(m).id)
+    clock.t = T0 + 60; m.tick()
+    assert len(sent) == 2  # person prompt + the message; no extra "did not reply"
+
+
+def test_voice_message_saved_served_and_announced(tmp_path):
+    m, sent, _ = make(events_dir=str(tmp_path))
+    audio = b"\x1aE\xdf\xa3" + b"x" * 500  # webm-ish bytes
+    assert m.save_voice(audio, "webm") == "Sent"
+    (f,) = (tmp_path / "voice").iterdir()
+    assert f.read_bytes() == audio
+    assert sent[-1]["click"] == f"http://192.168.1.9:5000/voice?f={f.name}"
+    code, ctype, body = m._route_voice({"f": f.name})
+    assert (code, ctype, body) == (200, "audio/webm", audio)
+
+
+def test_voice_rejects_bad_input_and_path_tricks(tmp_path):
+    m, sent, _ = make(events_dir=str(tmp_path))
+    assert m.save_voice(b"x" * 500, "exe") == "unsupported audio type"
+    assert m.save_voice(b"", "webm") == "recording was empty"
+    (tmp_path / "secret.webm").write_bytes(b"x" * 500)
+    assert m._route_voice({"f": "../secret.webm"})[0] == 404
+    assert sent == []
+
+
+def test_voice_upload_over_real_server(tmp_path):
+    from stream import MAX_UPLOAD_BYTES, Streamer
+    m, sent, _ = make(events_dir=str(tmp_path))
+    s = Streamer(port=5096, events_dir=tmp_path)
+    try:
+        for path, h in m.routes().items():
+            s.add_route(path, h)
+        for path, h in m.upload_routes().items():
+            s.add_route(path, h, body=True)
+        base = "http://127.0.0.1:5096"
+        audio = b"\x1aE\xdf\xa3" + b"y" * 2000
+        req = urllib.request.Request(base + "/talk?ext=webm", data=audio, method="POST")
+        assert urllib.request.urlopen(req).read() == b"Sent"
+        name = sent[-1]["click"].split("f=")[1]
+        assert urllib.request.urlopen(f"{base}/voice?f={name}").read() == audio
+        req = urllib.request.Request(base + "/message?key=call_me", data=b"", method="POST")
+        assert urllib.request.urlopen(req).read() == b"Sent"
+        j = json.load(urllib.request.urlopen(base + "/messages.json"))
+        assert [x["kind"] for x in j["messages"]] == ["voice", "text"]
+        big = urllib.request.Request(base + "/talk?ext=webm", data=b"z" * (MAX_UPLOAD_BYTES + 1), method="POST")
+        # Refused without reading the body: the client sees a 413 or the connection drop.
+        with pytest.raises((urllib.error.HTTPError, ConnectionError)) as e:
+            urllib.request.urlopen(big)
+        if isinstance(e.value, urllib.error.HTTPError):
+            assert e.value.code == 413
+        assert len(list((tmp_path / "voice").iterdir())) == 1  # nothing saved for it
     finally:
         s.close()

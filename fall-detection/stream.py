@@ -22,6 +22,8 @@ from urllib.parse import parse_qs
 
 import cv2
 
+MAX_UPLOAD_BYTES = 5_000_000  # POST bodies above this are refused (voice clips are ~100 kB)
+
 HERE = Path(__file__).resolve().parent
 NAME_RE = re.compile(r"^(\d{8})-(\d{6})-(\d{3})\.jpg$")
 ALERT_SECONDS = 10.0
@@ -81,8 +83,12 @@ class Streamer:
         self._jpg, self._last_enc = None, 0.0
         self._alert_until, self._alert_text, self._box = 0.0, "", None
         self._closed = False
+<<<<<<< HEAD
         self.config = {}
         self.routes = {}  # path -> handler(query) -> (status, content_type, body); see add_route
+=======
+        self._routes = {}  # path -> (handler, wants_body); see add_route
+>>>>>>> 235fc5b37bb6642a065676cba11b89202be73ab0
         outer = self
 
         class H(BaseHTTPRequestHandler):
@@ -98,15 +104,24 @@ class Streamer:
                 self.end_headers()
                 self.wfile.write(body)
 
+<<<<<<< HEAD
             def _route(self):
                 """Serve a route added with add_route. True if one handled the request."""
                 path, _, qs = self.path.partition("?")
                 handler = outer.routes.get(path)
                 if handler is None:
+=======
+            def _route(self, data=b""):
+                """Serve a route added with add_route(). True if one handled the request."""
+                path, _, qs = self.path.partition("?")
+                route = outer._routes.get(path)
+                if route is None:
+>>>>>>> 235fc5b37bb6642a065676cba11b89202be73ab0
                     return False
+                handler, wants_body = route
                 query = {k: v[-1] for k, v in parse_qs(qs).items()}
                 try:
-                    code, ctype, body = handler(query)
+                    code, ctype, body = handler(query, data) if wants_body else handler(query)
                 except Exception as e:
                     code, ctype, body = 500, "text/plain", repr(e).encode()
                 self._send(code, body, ctype)
@@ -115,9 +130,11 @@ class Streamer:
             def do_POST(self):
                 length = int(self.headers.get("Content-Length") or 0)
                 try:
-                    if length:
-                        self.rfile.read(length)  # body unused; keeps the connection clean
-                    if not self._route():
+                    if length > MAX_UPLOAD_BYTES:
+                        self.close_connection = True  # do not read a huge body
+                        return self._send(413, b"upload too large")
+                    data = self.rfile.read(length) if length else b""
+                    if not self._route(data):
                         self._send(404, b"not found")
                 except (BrokenPipeError, ConnectionResetError, OSError):
                     return
@@ -178,9 +195,16 @@ class Streamer:
         print(f"[stream] dashboard -> http://localhost:{port}/   phone page -> /phone")
         print(f"[stream] events folder -> {self.events_path() or '(not created yet)'}")
 
+<<<<<<< HEAD
     def add_route(self, path, handler):
         """Serve path (GET and POST) with handler(query) -> (status, content_type, body)."""
         self.routes[path] = handler
+=======
+    def add_route(self, path, handler, body=False):
+        """Serve `path` (GET and POST) with handler(query) -> (status, content_type, body).
+        With body=True the handler is called as handler(query, request_body_bytes)."""
+        self._routes[path] = (handler, body)
+>>>>>>> 235fc5b37bb6642a065676cba11b89202be73ab0
 
     def set_config(self, **kw):
         """Values shown on the phone page: name, room, address, phone, countdown, push, talk."""
