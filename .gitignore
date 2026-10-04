@@ -7,3 +7,4 @@ fall-detection/events/
 fall-detection/models/*.task
 
 fall-detection/params.local.toml
+fall-detection/data/
