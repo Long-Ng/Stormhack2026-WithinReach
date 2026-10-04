@@ -19,6 +19,7 @@ import queue
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 from collections import deque
 from dataclasses import asdict, dataclass
@@ -88,6 +89,7 @@ class FallReport:
 
 # --- what the monitor should do: a fixed table, never model output -------------------
 URGENT, HIGH, MEDIUM, LOW = "urgent", "high", "medium", "low"
+ON_FLOOR = {"on_back", "face_down", "on_side", "sitting_on_floor"}
 _RANK = {URGENT: 3, HIGH: 2, MEDIUM: 1, LOW: 0}
 
 
@@ -99,9 +101,13 @@ def guidance(r: FallReport, minutes_since_fall: float, emergency: str = "911") -
         # Back up: the fall-type advice no longer applies, a head strike still does.
         rules = [(LOW, "They appear to be up. Check in by voice anyway.")]
         return _combine(rules + ([head] if r.head_struck_likely == "yes" else []))
-    if not r.is_fall or r.fall_type == "not_a_fall":
-        return _combine([(LOW, "This may not be a fall. Check the live camera to be sure.")])
     rules: list[tuple[str, str]] = []
+    if not r.is_fall or r.fall_type == "not_a_fall":
+        if r.position not in ON_FLOOR:
+            return _combine([(LOW, "This may not be a fall. Check the live camera to be sure.")])
+        # Staged-looking or slow falls read as "lying down on purpose": still on the floor.
+        rules.append((MEDIUM, "It may not have been a fall, but they are on the floor. "
+                              "Check the live camera and talk to them."))
     if r.fall_type == "collapse":
         rules.append((URGENT, f"They may have fainted or lost consciousness. Call {emergency} now."))
     if r.position == "face_down" and r.movement == "still":
@@ -149,9 +155,16 @@ def encode_frames(frames: list[tuple[float, np.ndarray]]) -> list[dict]:
     return parts
 
 
+RETRY_CODES = {429, 500, 502, 503, 504}  # overloaded / rate limited: worth another try
+RETRY_WAITS_S = (2.0, 5.0)  # per model, between attempts
+
+
 class GeminiClient:
-    def __init__(self, api_key: str, model: str, timeout_s: float = 30.0):
+    def __init__(self, api_key: str, model: str, timeout_s: float = 60.0,
+                 fallback_models: tuple[str, ...] = (), sleep=time.sleep):
         self.api_key, self.model, self.timeout_s = api_key, model, timeout_s
+        self.models = (model,) + tuple(m for m in fallback_models if m and m != model)
+        self._sleep = sleep
 
     def request_body(self, prompt: str, frames: list[tuple[float, np.ndarray]]) -> dict:
         return {
@@ -165,9 +178,27 @@ class GeminiClient:
         """minutes_since_fall None: the first look at a new fall; else a status update."""
         prompt = (PROMPT_FALL if minutes_since_fall is None
                   else PROMPT_UPDATE.format(minutes=round(minutes_since_fall)))
+        data = json.dumps(self.request_body(prompt, frames)).encode()
+        last: Exception | None = None
+        # Gemini often answers 503 "high demand": retry, then try the fallback model.
+        for model in self.models:
+            for attempt in range(len(RETRY_WAITS_S) + 1):
+                if attempt:
+                    self._sleep(RETRY_WAITS_S[attempt - 1])
+                try:
+                    return self._call(model, data)
+                except urllib.error.HTTPError as e:
+                    if e.code not in RETRY_CODES:
+                        raise  # bad key or bad request: retrying will not help
+                    last = e
+                except (TimeoutError, urllib.error.URLError) as e:
+                    last = e
+            print(f"[gemini] {model} unavailable ({last!r})", file=sys.stderr, flush=True)
+        raise last
+
+    def _call(self, model: str, data: bytes) -> FallReport:
         req = urllib.request.Request(
-            API_URL.format(model=self.model),
-            data=json.dumps(self.request_body(prompt, frames)).encode(),
+            API_URL.format(model=model), data=data,
             headers={"Content-Type": "application/json", "x-goog-api-key": self.api_key})
         with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
             out = json.loads(resp.read())

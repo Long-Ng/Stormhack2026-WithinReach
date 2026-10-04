@@ -163,7 +163,7 @@ def main() -> int:
     if alerts is not None and gemini_key:
         history = FrameHistory()
         analyst = FallAnalyst(
-            GeminiClient(gemini_key, cfg.gemini_model),
+            GeminiClient(gemini_key, cfg.gemini_model, fallback_models=(cfg.gemini_fallback_model,)),
             on_report=lambda inc_id, r, minutes: manager.add_report(
                 inc_id, report_dict(r, minutes, cfg.emergency_number)),
             is_open=manager.is_open, update_s=cfg.gemini_update_s)

@@ -37,7 +37,13 @@ def test_up_or_not_a_fall_is_low():
     assert guidance(report(movement="up_and_moving", position="standing"), 0)[0] == LOW
     up_after_head_strike = report(movement="up_and_moving", head_struck_likely="yes")
     assert guidance(up_after_head_strike, 0)[0] == HIGH  # a head strike still matters
-    assert guidance(report(is_fall=False, fall_type="not_a_fall"), 0)[0] == LOW
+    assert guidance(report(is_fall=False, fall_type="not_a_fall", position="not_visible"), 0)[0] == LOW
+
+
+def test_not_a_fall_but_on_the_floor_is_never_low():
+    on_floor = report(is_fall=False, fall_type="not_a_fall", position="on_back", movement="still")
+    assert guidance(on_floor, 0)[0] == MEDIUM
+    assert guidance(on_floor, 5)[0] == URGENT  # still not moving 5 minutes later
 
 
 def test_emergency_number_is_configurable():
@@ -136,3 +142,33 @@ def test_reports_reach_the_monitor_once_alerted():
     assert json.loads(json.dumps(m.incidents[inc_id].reports))  # served in /incidents.json
     m.respond(inc_id, OK)
     assert not m.is_open(inc_id)
+
+
+def test_overloaded_model_is_retried_then_falls_back(monkeypatch):
+    import urllib.error
+    calls = []
+
+    def fake_call(model, data):
+        calls.append(model)
+        if model == "main":
+            raise urllib.error.HTTPError("u", 503, "high demand", {}, None)
+        return report()
+    c = GeminiClient("k", "main", fallback_models=("lite",), sleep=lambda s: None)
+    monkeypatch.setattr(c, "_call", fake_call)
+    assert c.analyze([]).fall_type == "backward"
+    assert calls == ["main", "main", "main", "lite"]
+
+
+def test_bad_key_is_not_retried(monkeypatch):
+    import urllib.error
+    import pytest
+    c = GeminiClient("k", "main", fallback_models=("lite",), sleep=lambda s: None)
+    calls = []
+
+    def fake_call(model, data):
+        calls.append(model)
+        raise urllib.error.HTTPError("u", 403, "forbidden", {}, None)
+    monkeypatch.setattr(c, "_call", fake_call)
+    with pytest.raises(urllib.error.HTTPError):
+        c.analyze([])
+    assert calls == ["main"]

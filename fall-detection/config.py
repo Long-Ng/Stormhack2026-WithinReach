@@ -95,6 +95,7 @@ class Config:
     # Gemini fall analysis: frames of a confirmed fall go to Google. Off without a key.
     gemini_api_key: str = ""  # put in params.local.toml (gitignored) or env GEMINI_API_KEY
     gemini_model: str = "gemini-3.8-flash"
+    gemini_fallback_model: str = "gemini-3.5-flash-lite"  # tried when the main one is overloaded
     gemini_update_s: float = 300.0  # status update this often while the incident is open
     emergency_number: str = "911"  # used in the guidance text ("Call 911 now")
 

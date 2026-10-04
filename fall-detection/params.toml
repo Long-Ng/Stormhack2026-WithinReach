@@ -99,6 +99,7 @@ public_url = ""               # empty = http://<this PC's Wi-Fi IP>:<port>
 # open. Camera frames are sent to Google. Off unless gemini_api_key is set in
 # params.local.toml (or the GEMINI_API_KEY environment variable).
 gemini_model = "gemini-3.8-flash"
+gemini_fallback_model = "gemini-3.5-flash-lite"   # used when the main model is overloaded (503)
 gemini_update_s = 300.0
 emergency_number = "911"     # only used in guidance text; nothing is dialled
 

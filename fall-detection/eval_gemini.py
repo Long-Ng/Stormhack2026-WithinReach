@@ -72,7 +72,7 @@ def main() -> int:
     if not key:
         print("set gemini_api_key in params.local.toml or GEMINI_API_KEY", file=sys.stderr)
         return 1
-    client = GeminiClient(key, cfg.gemini_model)
+    client = GeminiClient(key, cfg.gemini_model, fallback_models=(cfg.gemini_fallback_model,))
     vids = sorted(glob.glob(str(Path(args.root) / args.pattern)))
     if args.limit:
         vids = vids[:args.limit]
