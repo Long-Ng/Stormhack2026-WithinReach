@@ -104,6 +104,20 @@ gemini_update_s = 60.0       # how often Gemini checks on the person
 gemini_notify_s = 300.0      # the monitor gets the latest analysis at most this often
 gemini_notify_urgent_now = true  # except: turning urgent ("call 911") is sent at once
 gemini_max_minutes = 60.0    # stop checking after this long
+
+[rest_zones]
+# Lying inside a rest zone (bed, sofa, armchair, recliner) is resting, not a fall:
+# the shoulders and hips must both be inside, so lying on the floor beside the bed
+# still counts. With a Gemini key, the room is scanned once it is empty, and again
+# when it looks different (furniture moved) for scene_change_s. Edit zones_file to add
+# zones by hand: {"label": "bed", "box": [x0, y0, x1, y1], "source": "manual"}, with
+# the box in fractions of the frame; manual zones are never replaced by a scan.
+rest_zones = true
+zones_file = "data/zones.json"
+scene_empty_s = 5.0
+scene_change_frac = 0.1      # moving a sofa changes ~20% of the picture; lighting ~0%
+scene_change_s = 20.0
+scene_min_interval_s = 600.0
 emergency_number = "911"     # only used in guidance text; nothing is dialled
 
 [display]

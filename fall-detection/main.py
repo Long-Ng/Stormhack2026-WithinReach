@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import json
 import os
 import sys
 import time
@@ -34,6 +35,7 @@ from detector import FallDetector, State
 from events import ConsoleSink, FallEvent, FileSink, dispatch, save_snapshot
 from features import FeatureExtractor, FeatureLogger
 from gemini import FallAnalyst, FrameHistory, GeminiClient, report_dict
+from zones import SceneScanner, SceneWatcher, ZoneStore, draw_zones
 from imu import open_wearable
 from inject import KEYS as INJECT_KEYS, ClipInjector
 from overlay import draw_overlay, draw_skeleton, draw_text
@@ -189,6 +191,25 @@ def main() -> int:
     elif alerts is not None:
         print("[gemini] off: set gemini_api_key in params.local.toml to describe falls")
 
+    # Rest zones (bed, sofa): lying there is not a fall. Gemini finds them when it can.
+    zone_store = watcher = scanner = None
+    if cfg.rest_zones:
+        zone_store = ZoneStore(cfg.zones_file)
+        if gemini_key:
+            watcher = SceneWatcher(cfg.scene_empty_s, cfg.scene_change_frac, cfg.scene_change_s,
+                                   cfg.scene_min_interval_s, have_zones=bool(zone_store.zones))
+            scanner = SceneScanner(
+                GeminiClient(gemini_key, cfg.gemini_model,
+                             fallback_models=(cfg.gemini_fallback_model,)).analyze_scene,
+                zone_store, watcher)
+        names = ", ".join(z.label for z in zone_store.zones) or "none yet"
+        print(f"[zones] rest zones: {names}"
+              + ("; Gemini rescans when the empty room changes" if scanner else
+                 "; add a Gemini key for automatic room scans"))
+        if streamer is not None:
+            streamer.add_route("/zones.json", lambda q: (
+                200, "application/json", json.dumps(zone_store.as_json()).encode()))
+
     with contextlib.ExitStack() as stack:
         stack.callback(recorder.close)  # finish the clip in progress on exit
         if alerts is not None:
@@ -240,6 +261,15 @@ def main() -> int:
                 history.add(frame, ts_ms / 1000.0)  # clean frame, before any overlay
             lms = estimator.process(frame, ts_ms)
             feats = extractor.update(lms, ts_ms / 1000.0)
+            rest_zone = None
+            if zone_store is not None:
+                if feats is not None:
+                    rest_zone = zone_store.zone_at(feats.shoulder_xy, feats.hip_xy,
+                                                   (frame.shape[1], frame.shape[0]))
+                detector.in_rest_zone = rest_zone is not None
+                if watcher is not None and watcher.update(frame, ts_ms / 1000.0, lms is not None):
+                    watcher.scanned(frame, ts_ms / 1000.0)
+                    scanner.start(frame)  # clean frame: no overlay drawn yet
             phone_still = None
             if wearable is not None:
                 for hit in wearable.poll():
@@ -280,6 +310,8 @@ def main() -> int:
 
             if not args.no_display:
                 draw_overlay(frame, lms, feats, detector, fps, cfg.min_visibility, cover, wearable)
+                if zone_store is not None:
+                    draw_zones(frame, zone_store.zones, rest_zone)
                 if injector is not None and injector.active:  # this window only, not the dashboard
                     draw_text(frame, f"DEMO CLIP: {injector.name}", (frame.shape[1] // 2 - 140, 30),
                               (0, 0, 255), scale=0.7)

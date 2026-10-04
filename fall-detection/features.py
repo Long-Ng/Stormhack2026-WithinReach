@@ -35,6 +35,8 @@ class Features:
     motion: float               # torso lengths/s, smoothed
     torso_len: float            # pixels
     torso_ref: float            # pixels
+    shoulder_xy: tuple[float, float] | None = None  # pixels, for rest zones
+    hip_xy: tuple[float, float] | None = None       # pixels
 
 
 def _midpoint(lms: np.ndarray, visible: np.ndarray, a: int, b: int) -> np.ndarray | None:
@@ -173,13 +175,18 @@ class FeatureExtractor:
             motion=self._motion_s if self._motion_s is not None else 0.0,
             torso_len=torso_len,
             torso_ref=torso_ref,
+            shoulder_xy=(float(shoulder_mid[0]), float(shoulder_mid[1])),
+            hip_xy=(float(hip_mid[0]), float(hip_mid[1])),
         )
+
+
+POSITIONS = {"shoulder_xy", "hip_xy"}  # pixel points, not features to tune: not logged
 
 
 class FeatureLogger:
     """Writes one CSV row per frame. Frames without a pose get only `t` and pose=0."""
 
-    COLUMNS = ["pose"] + [f.name for f in fields(Features)]
+    COLUMNS = ["pose"] + [f.name for f in fields(Features) if f.name not in POSITIONS]
 
     def __init__(self, path: str):
         self._file = open(path, "w", newline="")
@@ -192,7 +199,8 @@ class FeatureLogger:
         else:
             row = {"pose": 1}
             for k, v in asdict(feats).items():
-                row[k] = "" if v is None else f"{v:.4f}"
+                if k not in POSITIONS:
+                    row[k] = "" if v is None else f"{v:.4f}"
         self._writer.writerow(row)
 
     def close(self) -> None:

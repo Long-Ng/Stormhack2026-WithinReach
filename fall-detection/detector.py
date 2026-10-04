@@ -37,6 +37,7 @@ class FallDetector:
     def __init__(self, cfg: Config):
         self.cfg = cfg
         self.state = State.UPRIGHT
+        self.in_rest_zone = False  # set by main.py each frame: lying in bed/sofa is not "down"
         self._prev_t: float | None = None
         self._fall_start: float | None = None
         self._peak_vel = 0.0
@@ -60,6 +61,8 @@ class FallDetector:
         only a tilted torso counts.
         """
         cfg = self.cfg
+        if self.in_rest_zone:
+            return False
         if f.hip_height is None:
             return f.torso_angle > cfg.lying_angle
         horizontal = f.torso_angle > cfg.lying_angle or f.bbox_aspect > cfg.lying_aspect

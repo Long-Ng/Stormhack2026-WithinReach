@@ -154,7 +154,7 @@ def test_overloaded_model_is_retried_then_falls_back(monkeypatch):
         calls.append(model)
         if model == "main":
             raise urllib.error.HTTPError("u", 503, "high demand", {}, None)
-        return report()
+        return vars(report())  # raw JSON, parsed by the caller
     c = GeminiClient("k", "main", fallback_models=("lite",), sleep=lambda s: None)
     monkeypatch.setattr(c, "_call", fake_call)
     assert c.analyze([]).fall_type == "backward"

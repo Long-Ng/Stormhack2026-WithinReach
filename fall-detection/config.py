@@ -12,7 +12,7 @@ MODELS_DIR = Path(__file__).parent / "models"
 DEFAULT_PARAMS = Path(__file__).parent / "params.toml"
 # Private overrides (ntfy topics, phone numbers), gitignored; read after the main file.
 LOCAL_PARAMS = Path(__file__).parent / "params.local.toml"
-PATH_KEYS = {"model_path", "events_dir"}  # relative values resolve against the params file
+PATH_KEYS = {"model_path", "events_dir", "zones_file"}  # relative values resolve against the params file
 
 
 @dataclass
@@ -100,6 +100,15 @@ class Config:
     gemini_notify_s: float = 300.0  # the monitor gets an analysis at most this often
     gemini_notify_urgent_now: bool = True  # ...except when it turns urgent: at once
     gemini_max_minutes: float = 60.0  # stop checking this long after the fall
+
+    # Rest zones: lying inside one (bed, sofa) is resting, not a fall. Found by a Gemini
+    # room scan when the room is empty and has changed; manual zones can be added to the file.
+    rest_zones: bool = True
+    zones_file: str = str(Path(__file__).parent / "data" / "zones.json")
+    scene_empty_s: float = 5.0  # nobody in view this long before the room is compared
+    scene_change_frac: float = 0.1  # share of the picture that must differ from the scan
+    scene_change_s: float = 20.0  # ...for this long, so passing shadows do not count
+    scene_min_interval_s: float = 600.0  # at most one room scan per 10 min
     emergency_number: str = "911"  # used in the guidance text ("Call 911 now")
 
     # Display

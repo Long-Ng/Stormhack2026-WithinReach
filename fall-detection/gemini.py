@@ -80,6 +80,30 @@ now, using only what is visible. The fall_type field is about the original fall;
 "unclear" if you cannot tell it from these images."""
 
 
+SCENE_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "description": {"type": "STRING", "description": "One sentence: what room this is and "
+                        "its main furniture."},
+        "rest_areas": {"type": "ARRAY", "items": {
+            "type": "OBJECT",
+            "properties": {
+                "label": {"type": "STRING", "enum": ["bed", "sofa", "armchair", "recliner"]},
+                "box_2d": {"type": "ARRAY", "items": {"type": "INTEGER"},
+                           "description": "[ymin, xmin, ymax, xmax], each 0-1000"},
+            },
+            "required": ["label", "box_2d"]}},
+    },
+    "required": ["description", "rest_areas"],
+}
+
+PROMPT_SCENE = """This is a fixed home camera watching an older adult's room. Find the
+furniture a person may lie on to rest: beds, sofas, armchairs, recliners. For each one,
+box ONLY its top surface where a body would lie or sit (the mattress, the seat cushions):
+not the frame, legs, sides or headboard, and never the floor in front of it. Do not
+include chairs at a table, tables, rugs, mats or the floor. An empty list is fine."""
+
+
 @dataclass
 class FallReport:
     is_fall: bool
@@ -210,7 +234,17 @@ class GeminiClient:
                                  "response_schema": SCHEMA, "temperature": 0.0},
         }
 
-    def _generate(self, body: dict) -> FallReport:
+    def analyze_scene(self, frame: np.ndarray) -> tuple[str, list[dict]]:
+        """Room scan: (description, [{"label", "box_2d"}]) for zones.zones_from_gemini."""
+        body = {
+            "contents": [{"parts": [{"text": PROMPT_SCENE}] + encode_frames([(0.0, frame)])[1:]}],
+            "generationConfig": {"response_mime_type": "application/json",
+                                 "response_schema": SCENE_SCHEMA, "temperature": 0.0},
+        }
+        out = self._generate(body, parse=lambda d: d)
+        return str(out.get("description", ""))[:300], list(out.get("rest_areas", []))
+
+    def _generate(self, body: dict, parse=FallReport.from_json):
         data = json.dumps(body).encode()
         last: Exception | None = None
         # Gemini often answers 503 "high demand": retry, then try the fallback model.
@@ -219,7 +253,7 @@ class GeminiClient:
                 if attempt:
                     self._sleep(RETRY_WAITS_S[attempt - 1])
                 try:
-                    return self._call(model, data)
+                    return parse(self._call(model, data))
                 except urllib.error.HTTPError as e:
                     if e.code not in RETRY_CODES:
                         raise  # bad key or bad request: retrying will not help
@@ -229,14 +263,14 @@ class GeminiClient:
             print(f"[gemini] {model} unavailable ({last!r})", file=sys.stderr, flush=True)
         raise last
 
-    def _call(self, model: str, data: bytes) -> FallReport:
+    def _call(self, model: str, data: bytes) -> dict:
         req = urllib.request.Request(
             API_URL.format(model=model), data=data,
             headers={"Content-Type": "application/json", "x-goog-api-key": self.api_key})
         with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
             out = json.loads(resp.read())
         text = out["candidates"][0]["content"]["parts"][0]["text"]
-        return FallReport.from_json(json.loads(text))
+        return json.loads(text)
 
 
 # --- frames to send --------------------------------------------------------------------
