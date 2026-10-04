@@ -2,13 +2,15 @@
 
 Tiny web server (default http://localhost:5000):
   /                desktop dashboard (dashboard/index.html or dashboard.html)
-  /phone           phone page (dashboard/phone.html)
-  /config.json     name / room / address / emergency number given to main.py
+  /phone           phone page (dashboard/phone.html); first visit goes through /onboarding
+  /onboarding      onboarding flow (dashboard/onboarding.html); /onboarding?force=1 runs it again
+  /config.json     name / room / address / emergency number (+ onboarding data when present)
   /video           live MJPEG stream
   /snapshot        latest frame
   /events.json     saved fall snapshots + live alert state (same as /events_api)
   /events/<file>   one snapshot image (or clip)
-Extra routes (phone-alert replies etc.) are added with add_route().
+  /api/...         onboarding data (see onboarding.py)
+Extra routes: add_route(path, handler(query)) for GET and POST, add_post_route(path, handler(query, body, headers)).
 Call update(frame) with a clean frame; the red alert box is drawn here, not in main.py.
 """
 import json
@@ -22,11 +24,10 @@ from urllib.parse import parse_qs
 
 import cv2
 
-MAX_UPLOAD_BYTES = 5_000_000  # POST bodies above this are refused (voice clips are ~100 kB)
-
 HERE = Path(__file__).resolve().parent
 NAME_RE = re.compile(r"^(\d{8})-(\d{6})-(\d{3})\.jpg$")
 ALERT_SECONDS = 10.0
+MAX_BODY = 21 * 1024 * 1024
 DASHBOARDS = [
     HERE.parent / "dashboard" / "index.html",
     HERE.parent / "dashboard" / "dashboard.html",
@@ -34,9 +35,10 @@ DASHBOARDS = [
     HERE / "index.html",
 ]
 PHONE_PAGES = [HERE.parent / "dashboard" / "phone.html", HERE / "phone.html"]
+ONBOARDING_PAGES = [HERE.parent / "dashboard" / "onboarding.html", HERE / "onboarding.html"]
 MEDIA_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".mp4": "video/mp4", ".webm": "video/webm",
                ".avi": "video/x-msvideo"}
-MANIFEST = {"name": "Fall Alert", "short_name": "Fall Alert", "start_url": "/phone", "display": "standalone",
+MANIFEST = {"name": "Within Reach", "short_name": "Within Reach", "start_url": "/phone", "display": "standalone",
             "background_color": "#f4f4f1", "theme_color": "#b3261e", "icons": []}
 
 # Old dashboards without the "no-inject" marker get this small panel added.
@@ -84,7 +86,9 @@ class Streamer:
         self._alert_until, self._alert_text, self._box = 0.0, "", None
         self._closed = False
         self.config = {}
-        self._routes = {}  # path -> (handler, wants_body); see add_route
+        self.routes = {}       # path -> handler(query) -> (status, content_type, body); GET and POST
+        self.post_routes = {}  # path -> handler(query, body, headers) -> (status, content_type, body); POST only
+        self.onboarding = None
         outer = self
 
         class H(BaseHTTPRequestHandler):
@@ -100,35 +104,49 @@ class Streamer:
                 self.end_headers()
                 self.wfile.write(body)
 
-            def _route(self, data=b""):
-                """Serve a route added with add_route(). True if one handled the request."""
+            def _redirect(self, to):
+                self.send_response(302)
+                self.send_header("Location", to)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+            def _route(self):
+                """Serve a route added with add_route. True if one handled the request."""
                 path, _, qs = self.path.partition("?")
-                route = outer._routes.get(path)
-                if route is None:
+                handler = outer.routes.get(path)
+                if handler is None:
                     return False
-                handler, wants_body = route
                 query = {k: v[-1] for k, v in parse_qs(qs).items()}
                 try:
-                    code, ctype, body = handler(query, data) if wants_body else handler(query)
+                    code, ctype, body = handler(query)
                 except Exception as e:
                     code, ctype, body = 500, "text/plain", repr(e).encode()
                 self._send(code, body, ctype)
                 return True
 
             def do_POST(self):
+                path, _, qs = self.path.partition("?")
                 length = int(self.headers.get("Content-Length") or 0)
                 try:
-                    if length > MAX_UPLOAD_BYTES:
-                        self.close_connection = True  # do not read a huge body
-                        return self._send(413, b"upload too large")
-                    data = self.rfile.read(length) if length else b""
-                    if not self._route(data):
+                    if length > MAX_BODY:
+                        self.close_connection = True
+                        return self._send(413, b"too large")
+                    body = self.rfile.read(length) if length else b""
+                    handler = outer.post_routes.get(path)
+                    if handler is not None:
+                        query = {k: v[-1] for k, v in parse_qs(qs).items()}
+                        try:
+                            code, ctype, resp = handler(query, body, self.headers)
+                        except Exception as e:
+                            code, ctype, resp = 500, "text/plain", repr(e).encode()
+                        return self._send(code, resp, ctype)
+                    if not self._route():
                         self._send(404, b"not found")
                 except (BrokenPipeError, ConnectionResetError, OSError):
                     return
 
             def do_GET(self):
-                path = self.path.split("?")[0]
+                path, _, qs = self.path.partition("?")
                 try:
                     if self._route():
                         return
@@ -141,14 +159,25 @@ class Streamer:
                             html = html.replace("</body>", INJECT + "</body>", 1) if "</body>" in html else html + INJECT
                         return self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
                     if path in ("/phone", "/phone.html"):
+                        if outer.onboarding is not None and not outer.onboarding.done() and "skip" not in parse_qs(qs):
+                            return self._redirect("/onboarding")
                         f = outer._find(PHONE_PAGES, "phone.html")
                         if not f:
                             return self._send(404, b"phone.html not found in ../dashboard/ or next to stream.py")
                         return self._send(200, f.read_bytes(), "text/html; charset=utf-8")
+                    if path in ("/onboarding", "/onboarding.html"):
+                        f = outer._find(ONBOARDING_PAGES, "onboarding.html")
+                        if not f:
+                            return self._send(404, b"onboarding.html not found in ../dashboard/ or next to stream.py")
+                        return self._send(200, f.read_bytes(), "text/html; charset=utf-8")
                     if path == "/manifest.json":
                         return self._send(200, json.dumps(MANIFEST).encode(), "application/manifest+json")
                     if path == "/config.json":
-                        return self._send(200, json.dumps(outer.config).encode(), "application/json; charset=utf-8")
+                        cfg = dict(outer.config)
+                        if outer.onboarding is not None:
+                            cfg.update(outer.onboarding.config_overrides())
+                        return self._send(200, json.dumps(cfg, ensure_ascii=False).encode("utf-8"),
+                                          "application/json; charset=utf-8")
                     if path in ("/events.json", "/events_api"):
                         return self._send(200, json.dumps(outer.list_events()).encode(), "application/json")
                     if path.startswith("/events/"):
@@ -180,13 +209,22 @@ class Streamer:
         self.server = ThreadingHTTPServer(("0.0.0.0", port), H)
         self.server.daemon_threads = True
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
-        print(f"[stream] dashboard -> http://localhost:{port}/   phone page -> /phone")
+        print(f"[stream] dashboard -> http://localhost:{port}/   phone page -> /phone   onboarding -> /onboarding")
         print(f"[stream] events folder -> {self.events_path() or '(not created yet)'}")
+        try:  # onboarding is optional: the server still runs without onboarding.py
+            from onboarding import Onboarding
+            Onboarding(HERE / "data").attach(self)
+            print(f"[stream] onboarding data -> {HERE / 'data'}")
+        except Exception as e:
+            print(f"[stream] onboarding disabled: {e!r}")
 
-    def add_route(self, path, handler, body=False):
-        """Serve `path` (GET and POST) with handler(query) -> (status, content_type, body).
-        With body=True the handler is called as handler(query, request_body_bytes)."""
-        self._routes[path] = (handler, body)
+    def add_route(self, path, handler):
+        """Serve path (GET and POST) with handler(query) -> (status, content_type, body)."""
+        self.routes[path] = handler
+
+    def add_post_route(self, path, handler):
+        """Serve path (POST) with handler(query, body, headers) -> (status, content_type, body)."""
+        self.post_routes[path] = handler
 
     def set_config(self, **kw):
         """Values shown on the phone page: name, room, address, phone, countdown, push, talk."""

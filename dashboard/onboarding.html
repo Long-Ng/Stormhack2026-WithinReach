@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f3f5f2">
+<title>Within Reach</title>
+<style>
+:root{--bg:#f3f5f2;--ink:#17382f;--mut:#6a7b74;--green:#20675a;--green-d:#17503f;--red:#a31212;--line:#d5ddd8;--card:#fff;--soft:#e5edea;--amber:#fdeccd;--amber-t:#7a4d06;--hl:#f4e8c8}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:"DM Sans","Segoe UI",system-ui,Roboto,sans-serif}
+.app{max-width:430px;margin:0 auto;min-height:100vh;min-height:100dvh;position:relative}
+.screen{display:none;min-height:100vh;min-height:100dvh;padding:calc(env(safe-area-inset-top) + 24px) 24px calc(env(safe-area-inset-bottom) + 24px);flex-direction:column}
+.screen.on{display:flex}
+button{font:inherit;cursor:pointer}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:22px;margin-top:6px}
+.brand .lg{width:36px;height:36px;border-radius:10px;background:var(--green);display:grid;place-items:center}
+.lang{margin-left:auto;border:0;background:transparent;color:var(--mut);font-weight:700;font-size:13px}
+.hero{background:var(--card);border-radius:28px;padding:14px;margin-top:22px;box-shadow:0 10px 30px rgba(23,56,47,.12)}
+.hero .img{background:#d9e2de;border-radius:22px;height:128px;position:relative;display:grid;place-items:center}
+.hero .room{position:absolute;left:12px;top:12px;background:#fff;border-radius:99px;padding:6px 12px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px}
+.hero .room:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ink)}
+.hero .row{display:flex;align-items:center;gap:10px;padding:14px 6px 4px}
+.hero .row b{display:block;font-size:17px}.hero .row span{color:var(--mut);font-size:14px}
+.hero .ok{margin-left:auto;width:46px;height:46px;border-radius:50%;background:var(--soft);display:grid;place-items:center;flex-shrink:0}
+.hero .ok.warn{background:#fbe2df}
+h1.big{font-size:34px;line-height:1.08;margin:34px 0 12px;letter-spacing:-.5px}
+.sub{color:var(--mut);font-size:15.5px;margin:0 0 14px}
+.steps{list-style:none;margin:0;padding:0}
+.steps li{display:flex;align-items:center;gap:14px;margin:10px 0;font-size:16px}
+.steps i{font-style:normal;width:32px;height:32px;border-radius:50%;background:var(--soft);display:grid;place-items:center;font-size:14px;font-weight:600}
+.spacer{flex:1}
+.btn{display:block;width:100%;border:2px solid transparent;border-radius:16px;padding:17px;font-size:16px;font-weight:700;text-align:center}
+.btn.primary{background:var(--green);color:#fff}
+.btn.primary:active{background:var(--green-d)}
+.btn.ghost{background:transparent;border-color:var(--green);color:var(--green);margin-top:12px}
+.btn[disabled]{background:#b5b5b5;color:#f3f3f3;cursor:not-allowed;border-color:transparent}
+.top{display:flex;align-items:center;margin-bottom:18px}
+.back{width:48px;height:48px;border-radius:14px;border:0;background:#fff;display:grid;place-items:center;flex-shrink:0}
+.top .st{flex:1;text-align:center;color:var(--mut);font-weight:700;font-size:15px;margin-right:48px}
+h2{font-size:27px;line-height:1.12;margin:4px 0 8px;letter-spacing:-.3px}
+.desc{color:var(--mut);font-size:15px;line-height:1.4;margin:0 0 14px}
+.card{background:#fff;border-radius:24px;padding:18px 18px 8px;box-shadow:0 1px 0 rgba(0,0,0,.03)}
+.card .hd{display:flex;justify-content:space-between;color:var(--mut);font-size:12.5px;font-weight:700;letter-spacing:.04em;margin-bottom:10px}
+.script{max-height:236px;overflow:auto;padding-right:8px;padding-bottom:10px}
+.script p{margin:0 0 12px;font-size:17px;line-height:1.38;color:var(--ink)}
+.script p.cur{font-weight:800}
+.script p.fut{color:#8c9b95}
+.ph{background:var(--hl);border-radius:6px;padding:1px 6px;font-weight:800;cursor:pointer}
+.status{text-align:center;font-weight:800;font-size:16px;margin:20px 0 14px}
+.mic{display:grid;place-items:center;margin:0 auto 14px;width:80px;height:80px;border-radius:50%;border:0;background:var(--green);color:#fff}
+.mic.rec{background:var(--red);box-shadow:0 0 0 8px #f6c6c6}
+canvas{display:block;margin:0 auto 18px;width:100%;max-width:300px;height:40px}
+.again{display:block;margin:-6px auto 14px;border:0;background:none;color:var(--green);font-weight:700;font-size:14px}
+.dash{width:100%;border:2px dashed #a8b9b1;background:transparent;border-radius:18px;padding:17px;color:var(--green);font-weight:800;font-size:16px;margin-top:6px}
+.form{background:#fff;border:1px solid var(--line);border-radius:24px;padding:16px}
+.form label{display:block;font-weight:800;font-size:14px;margin:6px 0 8px}
+.form input{width:100%;border:1px solid var(--line);border-radius:18px;padding:15px 16px;font:inherit;font-size:16px;background:#fff;margin-bottom:12px;color:var(--ink)}
+.form input::placeholder{color:#9aa8a2}
+.member{background:#fff;border-radius:22px;padding:16px;display:flex;align-items:center;gap:14px;margin-bottom:12px;position:relative}
+.member .av{width:48px;height:48px;border-radius:50%;background:var(--soft);display:grid;place-items:center;font-weight:800;color:var(--green);flex-shrink:0}
+.member .nm{flex:1;min-width:0}.member .nm b{display:block;font-size:17px;line-height:1.2;word-break:break-word}.member .nm span{color:var(--mut);font-size:15px}
+.pill{border:0;background:var(--amber);color:var(--amber-t);border-radius:99px;padding:8px 13px;font-weight:700;font-size:13px;white-space:nowrap}
+.pill.todo{background:#fff;border:1.5px solid #e1c16f}
+.del{position:absolute;top:6px;right:8px;border:0;background:none;color:#9aa8a2;font-size:17px}
+.note{text-align:center;color:var(--mut);font-size:13.5px;margin:0 0 10px;padding:0 20px}
+.toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#17382f;color:#fff;border-radius:14px;padding:12px 16px;font-size:14px;max-width:min(400px,90vw);display:none;z-index:20;text-align:center}
+.hide{display:none!important}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- 1. Welcome -->
+<section class="screen on" id="s-welcome">
+  <div class="brand">
+    <div class="lg"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg></div>
+    <span>Within Reach</span>
+    <button class="lang" id="lang">EN</button>
+  </div>
+  <div class="hero">
+    <div class="img">
+      <span class="room" id="roomPill">Phòng khách</span>
+      <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#7d9088" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>
+    </div>
+    <div class="row">
+      <div><b id="heroT">All clear</b><span id="heroS"></span></div>
+      <div class="ok" id="heroOk"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#17382f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></div>
+    </div>
+  </div>
+  <h1 class="big" data-t="hello"></h1>
+  <p class="sub" data-t="twoSteps"></p>
+  <ul class="steps"><li><i>1</i><span data-t="step1"></span></li><li><i>2</i><span data-t="step2"></span></li></ul>
+  <div class="spacer"></div>
+  <button class="btn primary" id="start" data-t="getStarted"></button>
+  <button class="btn ghost" id="haveAcc" data-t="haveAccount"></button>
+</section>
+
+<!-- 2. Step 1: record -->
+<section class="screen" id="s-rec">
+  <div class="top">
+    <button class="back" data-back aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#17382f" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <div class="st" data-t="step1of2"></div>
+  </div>
+  <h2 data-t="recTitle"></h2>
+  <p class="desc" data-t="recDesc"></p>
+  <div class="card">
+    <div class="hd"><span data-t="readAloud"></span><span data-t="aboutMin"></span></div>
+    <div class="script" id="script"></div>
+  </div>
+  <div class="status" id="recStatus"></div>
+  <button class="mic" id="mic" aria-label="record"></button>
+  <canvas id="wave" width="640" height="80"></canvas>
+  <button class="again hide" id="again" data-t="recordAgain"></button>
+  <div class="spacer"></div>
+  <button class="btn primary" id="recNext" disabled></button>
+  <input type="file" id="file" accept="audio/*" capture class="hide">
+</section>
+
+<!-- 3. Step 2: family -->
+<section class="screen" id="s-who">
+  <div class="top">
+    <button class="back" data-back aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#17382f" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <div class="st" data-t="step2of2"></div>
+  </div>
+  <h2 data-t="whoTitle"></h2>
+  <p class="desc" data-t="whoDesc"></p>
+  <div id="members"></div>
+  <button class="dash" id="addBtn" data-t="addFamily"></button>
+  <div class="form hide" id="form">
+    <label for="fName" data-t="lName"></label>
+    <input id="fName" autocomplete="name">
+    <label for="fRel" data-t="lRel"></label>
+    <input id="fRel">
+    <label for="fPhone" data-t="lMobile"></label>
+    <input id="fPhone" type="tel" inputmode="tel" autocomplete="tel">
+    <button class="btn primary" id="addMember" disabled data-t="addMember"></button>
+  </div>
+  <div class="spacer"></div>
+  <p class="note" data-t="textNote"></p>
+  <button class="btn primary" id="finish" disabled data-t="finish"></button>
+</section>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  var $ = function(id){return document.getElementById(id);};
+  var T = {
+    vi:{hello:"Sự giúp đỡ sẽ đến, ngay cả khi bạn không thể kêu cứu.",twoSteps:"Hai bước nhanh để thiết lập:",step1:"Ghi âm tin nhắn khẩn cấp",step2:"Thêm người thân",
+      getStarted:"Bắt đầu",haveAccount:"Tôi đã có tài khoản",allClear:"Mọi thứ ổn",watching:"Đang theo dõi té ngã và dấu hiệu đột quỵ",fallNow:"Phát hiện té ngã",
+      step1of2:"Bước 1 / 2",step2of2:"Bước 2 / 2",recTitle:"Ghi âm tin nhắn khẩn cấp",recDesc:"Nếu bạn ngã và không nói được, đoạn ghi âm này cho người đến giúp biết bạn là ai và tìm bạn ở đâu.",
+      readAloud:"ĐỌC TO ĐOẠN NÀY",aboutMin:"~1 phút",tapMic:"Chạm vào micro và đọc theo",recording:"Đang ghi âm....",saved:"Đã lưu tin nhắn",
+      recordToContinue:"Ghi âm để tiếp tục",saveContinue:"Lưu và tiếp tục",saving:"Đang lưu...",recordAgain:"Ghi lại",
+      s1:"Tên tôi là {NAME}. Tôi sống tại {ADDR}.",s2:"Đây là bản ghi âm khẩn cấp tự động. Nó được kích hoạt vì tôi đã bị ngã và không thể tự gọi {PHONE}.",
+      s3:"Đã khoảng ba phút kể từ khi tôi ngã, và người thân hoặc người liên hệ khẩn cấp của tôi đã được báo.",s4:"Xin hãy đến địa chỉ của tôi ngay. Nếu bạn nghe thấy đoạn này, có thể tôi không nói được.",
+      phName:"[HỌ VÀ TÊN]",phAddr:"[ĐỊA CHỈ ĐẦY ĐỦ]",askName:"Họ và tên của bạn:",askAddr:"Địa chỉ nhà của bạn:",
+      whoTitle:"Chúng tôi nên báo cho ai?",whoDesc:"Nếu phát hiện té ngã hoặc dấu hiệu đột quỵ, những người này sẽ nhận cảnh báo trên điện thoại ngay.",
+      addFamily:"+ Thêm người thân",lName:"Tên",lRel:"Mối quan hệ",lMobile:"Số điện thoại",phFull:"Họ và tên",phRel:"Mối quan hệ của bạn",phPhone:"Số điện thoại",addMember:"Thêm người",
+      textNote:"Họ sẽ nhận một tin nhắn để tải ứng dụng và chấp nhận.",finish:"Hoàn tất thiết lập",invite:"Gửi lời mời",invited:"Đã mời",
+      inviteBody:"{WHO} muốn thêm bạn vào danh sách nhận cảnh báo té ngã. Mở: {URL}",someone:"Tôi",
+      micBlocked:"Trình duyệt chưa cho dùng micro (cần HTTPS hoặc localhost). Dùng ứng dụng ghi âm của máy.",uploadFail:"Không lưu được tin nhắn. Kiểm tra kết nối tới máy chủ.",
+      noProfile:"Máy chủ này chưa có hồ sơ. Hãy bấm Bắt đầu.",needBoth:"Cần có tin nhắn ghi âm và ít nhất một người thân.",saveFail:"Không lưu được, thử lại."},
+    en:{hello:"Help arrives, even if you can't ask for it.",twoSteps:"Two quick steps to get set up:",step1:"Record your emergency message",step2:"Add your family members",
+      getStarted:"Get Started",haveAccount:"I already have an account",allClear:"All clear",watching:"Watching for falls and stroke signs",fallNow:"Fall detected",
+      step1of2:"Step 1 of 2",step2of2:"Step 2 of 2",recTitle:"Record your emergency message",recDesc:"If you fall and can't speak, this tells help who you are and where to find you.",
+      readAloud:"READ THIS ALOUD",aboutMin:"~1 minute",tapMic:"Tap the mic and read along",recording:"Recording....",saved:"Message saved",
+      recordToContinue:"Record to continue",saveContinue:"Save and continue",saving:"Saving...",recordAgain:"Record again",
+      s1:"My name is {NAME}. I live at {ADDR}.",s2:"This is an automated emergency recording. It was triggered because I have fallen and have been unable to contact {PHONE} myself.",
+      s3:"It has been approximately three minutes since I fell, and my family or emergency contacts have been alerted.",s4:"Please send help to my address now. If you can hear this, I may be unable to speak.",
+      phName:"[FULL NAME]",phAddr:"[FULL ADDRESS]",askName:"Your full name:",askAddr:"Your home address:",
+      whoTitle:"Who should we alert?",whoDesc:"If a fall or stroke signs are detected, these people get an alert on their phone right away.",
+      addFamily:"+ Add family member",lName:"Name",lRel:"Relationship",lMobile:"Mobile",phFull:"Full name",phRel:"Your relationship",phPhone:"Phone number",addMember:"Add Member",
+      textNote:"They'll get a text to download the app and accept.",finish:"Finish Setup",invite:"Send invite",invited:"Invite sent",
+      inviteBody:"{WHO} wants to add you to their fall alerts. Open: {URL}",someone:"I",
+      micBlocked:"This browser can't use the microphone here (needs HTTPS or localhost). Use your phone's recorder app.",uploadFail:"Couldn't save the message. Check the connection to the server.",
+      noProfile:"This server has no profile yet. Tap Get Started.",needBoth:"You need a recorded message and at least one family member.",saveFail:"Couldn't save, try again."}
+  };
+  var LANG = new URLSearchParams(location.search).get("lang") || localStorage.getItem("fd.lang") || "vi";
+  if(!T[LANG]) LANG = "vi";
+  function t(k){return (T[LANG] && T[LANG][k]) || T.en[k] || k;}
+
+  var cfg = {room:"", phone:"911", address:""};
+  var profile = {name:"", address:"", onboarded:false, has_recording:false, recording_seconds:0, contacts:[]};
+  var S = {screen:"welcome", rec:"idle", form:false, secs:0, blob:null, blobUrl:null, uploaded:false, playing:false};
+  var R = {mr:null, stream:null, chunks:[], t0:0, timer:null, wave:null, levels:[], ctx:null, an:null};
+  var audio = null;
+
+  function toast(m){var e=$("toast");e.textContent=m;e.style.display="block";clearTimeout(e._h);e._h=setTimeout(function(){e.style.display="none";},4200);}
+  function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
+  function fmt(s){s=Math.max(0,Math.round(s));return Math.floor(s/60)+":"+("0"+(s%60)).slice(-2);}
+  function api(path, opts){return fetch(path, opts).then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r; });}
+  function postJson(path, obj){return api(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(obj)});}
+
+  // ---------- i18n ----------
+  function applyLang(){
+    document.documentElement.lang = LANG;
+    document.querySelectorAll("[data-t]").forEach(function(el){el.textContent = t(el.getAttribute("data-t"));});
+    $("lang").textContent = LANG === "vi" ? "EN" : "VI";
+    $("fName").placeholder = t("phFull"); $("fRel").placeholder = t("phRel"); $("fPhone").placeholder = t("phPhone");
+    renderHero(); renderScript(); renderRec(); renderWho();
+  }
+  $("lang").onclick = function(){LANG = LANG === "vi" ? "en" : "vi"; localStorage.setItem("fd.lang", LANG); applyLang();};
+
+  // ---------- navigation ----------
+  function show(name){
+    S.screen = name;
+    ["welcome","rec","who"].forEach(function(n){$("s-"+n).classList.toggle("on", n === name);});
+    window.scrollTo(0,0);
+  }
+  function goBack(){
+    stopPlayback();
+    if(S.screen === "who"){ if(S.form){ S.form = false; renderWho(); } else show("rec"); }
+    else if(S.screen === "rec"){ if(S.rec === "recording") stopRec(true); show("welcome"); }
+  }
+  document.querySelectorAll("[data-back]").forEach(function(b){b.onclick = goBack;});
+
+  // ---------- welcome ----------
+  function renderHero(){
+    $("roomPill").textContent = cfg.room || (LANG === "vi" ? "Phòng khách" : "Living room");
+    $("heroS").textContent = t("watching");
+    $("heroT").textContent = t("allClear");
+  }
+  function pollAlert(){
+    fetch("/events.json",{cache:"no-store"}).then(function(r){return r.json();}).then(function(d){
+      $("heroT").textContent = d.alert ? t("fallNow") : t("allClear");
+      $("heroOk").classList.toggle("warn", !!d.alert);
+    }).catch(function(){});
+  }
+  $("start").onclick = function(){show("rec"); renderRec();};
+  $("haveAcc").onclick = function(){
+    api("/api/profile",{cache:"no-store"}).then(function(r){return r.json();}).then(function(p){
+      if(p.onboarded){ localStorage.setItem("fd.onboarded","1"); location.href = "/phone"; }
+      else toast(t("noProfile"));
+    }).catch(function(){toast(t("noProfile"));});
+  };
+
+  // ---------- script ----------
+  function fill(s){
+    var name = profile.name, addr = profile.address || cfg.address;
+    return esc(s)
+      .replace("{NAME}", '<span class="ph" data-ph="name">'+esc(name || t("phName"))+'</span>')
+      .replace("{ADDR}", '<span class="ph" data-ph="addr">'+esc(addr || t("phAddr"))+'</span>')
+      .replace("{PHONE}", esc(cfg.phone || "911"));
+  }
+  function renderScript(){
+    var keys = ["s1","s2","s3","s4"], cur = -1;
+    if(S.rec === "recording") cur = Math.min(keys.length-1, Math.floor((Date.now()-R.t0)/7000));
+    $("script").innerHTML = keys.map(function(k,i){
+      var cls = cur < 0 ? "" : (i === cur ? "cur" : (i > cur ? "fut" : ""));
+      return '<p class="'+cls+'">'+fill(t(k))+'</p>';
+    }).join("");
+  }
+  $("script").addEventListener("click", function(e){
+    var ph = e.target.closest(".ph"); if(!ph || S.rec === "recording") return;
+    var kind = ph.getAttribute("data-ph");
+    var v = prompt(kind === "name" ? t("askName") : t("askAddr"), kind === "name" ? profile.name : (profile.address || cfg.address || ""));
+    if(v === null) return;
+    v = v.trim();
+    if(kind === "name") profile.name = v; else profile.address = v;
+    postJson("/api/profile", {name: profile.name, address: profile.address}).catch(function(){});
+    renderScript();
+  });
+
+  // ---------- waveform ----------
+  var cv = $("wave"), cx = cv.getContext("2d"), N = 60;
+  function bar(i, h, color){
+    var w = cv.width / N, x = i*w + w*0.3, bw = w*0.4, y = (cv.height - h)/2;
+    cx.fillStyle = color; cx.beginPath();
+    if(cx.roundRect) cx.roundRect(x, y, bw, h, bw/2); else cx.rect(x, y, bw, h);
+    cx.fill();
+  }
+  function drawWave(){
+    cx.clearRect(0,0,cv.width,cv.height);
+    for(var i=0;i<N;i++){
+      if(S.rec === "recording"){ var l = R.levels[R.levels.length-N+i] || 0; bar(i, 6 + l*70, "#a31212"); }
+      else if(S.rec === "saved"){ var h = 8 + Math.abs(Math.sin(i*1.7)+Math.sin(i*0.63+1.3))*18; bar(i, h, "#17382f"); }
+      else bar(i, 5, "#cbd3cf");
+    }
+  }
+
+  // ---------- recording ----------
+  var ICON_MIC = '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg>';
+  var ICON_STOP = '<svg width="28" height="28" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3" fill="#fff"/></svg>';
+  var ICON_PLAY = '<svg width="34" height="34" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z" fill="#fff"/></svg>';
+  var ICON_PAUSE = '<svg width="30" height="30" viewBox="0 0 24 24"><rect x="5" y="4" width="5" height="16" rx="1.5" fill="#fff"/><rect x="14" y="4" width="5" height="16" rx="1.5" fill="#fff"/></svg>';
+
+  function renderRec(){
+    var m = $("mic"), st = $("recStatus"), nx = $("recNext");
+    m.classList.toggle("rec", S.rec === "recording");
+    if(S.rec === "idle"){ m.innerHTML = ICON_MIC; st.textContent = t("tapMic"); nx.disabled = true; nx.textContent = t("recordToContinue"); }
+    else if(S.rec === "recording"){ m.innerHTML = ICON_STOP; st.textContent = t("recording")+" "+fmt((Date.now()-R.t0)/1000); nx.disabled = true; nx.textContent = t("recordToContinue"); }
+    else { m.innerHTML = S.playing ? ICON_PAUSE : ICON_PLAY; st.textContent = t("saved") + (S.secs > 0 ? " - "+fmt(S.secs) : ""); nx.disabled = false; nx.textContent = t("saveContinue"); }
+    $("again").classList.toggle("hide", S.rec !== "saved");
+    drawWave(); renderScript();
+  }
+
+  function pickMime(){
+    var c = ["audio/webm;codecs=opus","audio/webm","audio/mp4","audio/ogg;codecs=opus"];
+    for(var i=0;i<c.length;i++){ if(window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c[i])) return c[i]; }
+    return "";
+  }
+  function canRecord(){ return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder); }
+
+  function startRec(){
+    if(!canRecord()){ toast(t("micBlocked")); $("file").click(); return; }
+    navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+      R.stream = stream; R.chunks = []; R.levels = [];
+      var mime = pickMime();
+      R.mr = new MediaRecorder(stream, mime ? {mimeType:mime} : undefined);
+      R.mr.ondataavailable = function(e){ if(e.data && e.data.size) R.chunks.push(e.data); };
+      R.mr.onstop = onStopped;
+      try{
+        var AC = window.AudioContext || window.webkitAudioContext;
+        R.ctx = new AC(); var src = R.ctx.createMediaStreamSource(stream);
+        R.an = R.ctx.createAnalyser(); R.an.fftSize = 256; src.connect(R.an);
+      }catch(e){ R.an = null; }
+      R.mr.start(250);
+      S.rec = "recording"; S.uploaded = false; R.t0 = Date.now();
+      R.timer = setInterval(function(){ renderRec(); }, 200);
+      R.wave = setInterval(function(){
+        var l = Math.random()*0.35;
+        if(R.an){ var buf = new Uint8Array(R.an.fftSize); R.an.getByteTimeDomainData(buf); var sum = 0;
+          for(var i=0;i<buf.length;i++){ var v = (buf[i]-128)/128; sum += v*v; } l = Math.min(1, Math.sqrt(sum/buf.length)*4); }
+        R.levels.push(l); if(R.levels.length > 400) R.levels.splice(0,200); drawWave();
+      }, 70);
+      renderRec();
+    }).catch(function(){ toast(t("micBlocked")); $("file").click(); });
+  }
+  function stopRec(discard){
+    clearInterval(R.timer); clearInterval(R.wave);
+    S.secs = (Date.now()-R.t0)/1000;
+    R.discard = !!discard;
+    try{ R.mr.stop(); }catch(e){}
+    try{ R.stream.getTracks().forEach(function(t){t.stop();}); }catch(e){}
+    try{ R.ctx && R.ctx.close(); }catch(e){}
+  }
+  function onStopped(){
+    if(R.discard){ S.rec = "idle"; renderRec(); return; }
+    var type = (R.mr && R.mr.mimeType) || "audio/webm";
+    setBlob(new Blob(R.chunks, {type:type}), S.secs);
+  }
+  function setBlob(blob, secs){
+    S.blob = blob; S.secs = secs; S.uploaded = false;
+    if(S.blobUrl) URL.revokeObjectURL(S.blobUrl);
+    S.blobUrl = URL.createObjectURL(blob);
+    S.rec = "saved"; renderRec();
+  }
+  $("mic").onclick = function(){
+    if(S.rec === "idle") startRec();
+    else if(S.rec === "recording") stopRec(false);
+    else togglePlay();
+  };
+  $("again").onclick = function(){ stopPlayback(); S.rec = "idle"; S.blob = null; S.uploaded = false; S.secs = 0; renderRec(); };
+  $("file").onchange = function(){
+    var f = this.files && this.files[0]; if(!f) return;
+    var url = URL.createObjectURL(f), a = new Audio(url);
+    a.onloadedmetadata = function(){ setBlob(f, isFinite(a.duration) ? a.duration : 0); };
+    a.onerror = function(){ setBlob(f, 0); };
+    this.value = "";
+  };
+
+  // ---------- playback ----------
+  function togglePlay(){
+    if(!audio){
+      audio = new Audio(S.blobUrl || ("/api/recording?ts="+Date.now()));
+      audio.onended = function(){ S.playing = false; renderRec(); };
+    }
+    if(S.playing){ audio.pause(); S.playing = false; } else { audio.play().catch(function(){}); S.playing = true; }
+    renderRec();
+  }
+  function stopPlayback(){ if(audio){ audio.pause(); audio = null; } S.playing = false; if(S.rec === "saved") renderRec(); }
+
+  // ---------- save recording ----------
+  $("recNext").onclick = function(){
+    var btn = $("recNext");
+    stopPlayback();
+    if(S.uploaded || !S.blob){ goWho(); return; }
+    btn.disabled = true; btn.textContent = t("saving");
+    api("/api/recording?seconds="+Math.round(S.secs), {method:"POST", headers:{"Content-Type": S.blob.type || "audio/webm"}, body:S.blob})
+      .then(function(){ S.uploaded = true; profile.has_recording = true; goWho(); })
+      .catch(function(){ toast(t("uploadFail")); })
+      .then(function(){ btn.disabled = false; btn.textContent = t("saveContinue"); });
+  };
+  function goWho(){ show("who"); S.form = false; renderWho(); }
+
+  // ---------- family ----------
+  function renderWho(){
+    var list = profile.contacts || [];
+    $("members").innerHTML = list.map(function(c){
+      var pill = c.invited ? '<span class="pill">'+esc(t("invited"))+'</span>' : '<button class="pill todo" data-inv="'+esc(c.id)+'">'+esc(t("invite"))+'</button>';
+      return '<div class="member"><button class="del" data-del="'+esc(c.id)+'" aria-label="delete">&times;</button><div class="av">'+esc((c.name||"?").charAt(0).toUpperCase())+
+        '</div><div class="nm"><b>'+esc(c.name)+'</b><span>'+esc(c.relationship)+'</span></div>'+pill+'</div>';
+    }).join("");
+    $("addBtn").classList.toggle("hide", S.form);
+    $("form").classList.toggle("hide", !S.form);
+    $("finish").disabled = !(list.length && profile.has_recording);
+    checkForm();
+  }
+  function checkForm(){
+    var ok = $("fName").value.trim() && $("fRel").value.trim() && $("fPhone").value.replace(/\D/g,"").length >= 6;
+    $("addMember").disabled = !ok;
+  }
+  ["fName","fRel","fPhone"].forEach(function(id){$(id).addEventListener("input", checkForm);});
+  $("addBtn").onclick = function(){ S.form = true; renderWho(); $("fName").focus(); };
+  $("addMember").onclick = function(){
+    var body = {name:$("fName").value, relationship:$("fRel").value, phone:$("fPhone").value};
+    api("/api/contacts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
+      .then(function(r){return r.json();}).then(function(c){
+        profile.contacts.push(c); S.form = false;
+        $("fName").value = ""; $("fRel").value = ""; $("fPhone").value = "";
+        renderWho();
+      }).catch(function(){toast(t("saveFail"));});
+  };
+  $("members").addEventListener("click", function(e){
+    var d = e.target.closest("[data-del]"), v = e.target.closest("[data-inv]");
+    if(d){
+      var id = d.getAttribute("data-del");
+      api("/api/contacts/delete?id="+encodeURIComponent(id),{method:"POST"}).then(function(){
+        profile.contacts = profile.contacts.filter(function(c){return c.id !== id;}); renderWho();
+      }).catch(function(){toast(t("saveFail"));});
+    } else if(v){
+      var cid = v.getAttribute("data-inv"), c = profile.contacts.filter(function(x){return x.id === cid;})[0]; if(!c) return;
+      var body = t("inviteBody").replace("{WHO}", profile.name || t("someone")).replace("{URL}", location.origin + "/phone");
+      c.invited = true;
+      fetch("/api/contacts/invited?id="+encodeURIComponent(cid),{method:"POST"}).catch(function(){});
+      renderWho();
+      location.href = "sms:" + c.phone + "?body=" + encodeURIComponent(body);
+    }
+  });
+  $("finish").onclick = function(){
+    var b = $("finish"); b.disabled = true;
+    api("/api/finish",{method:"POST"}).then(function(){
+      localStorage.setItem("fd.onboarded","1"); location.href = "/phone";
+    }).catch(function(){ toast(t("needBoth")); b.disabled = false; });
+  };
+
+  // ---------- boot ----------
+  Promise.all([
+    fetch("/config.json").then(function(r){return r.json();}).catch(function(){return {};}),
+    fetch("/api/profile",{cache:"no-store"}).then(function(r){return r.json();}).catch(function(){return null;})
+  ]).then(function(res){
+    cfg = Object.assign(cfg, res[0] || {});
+    if(res[1]){
+      profile = Object.assign(profile, res[1]);
+      if(profile.has_recording){ S.rec = "saved"; S.secs = profile.recording_seconds || 0; S.uploaded = true; }
+    }
+    applyLang(); pollAlert(); setInterval(pollAlert, 3000);
+  });
+  applyLang();
+})();
+</script>
+</body>
+</html>
