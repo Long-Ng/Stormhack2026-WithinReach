@@ -30,7 +30,7 @@ class Onboarding:
         self.dir.mkdir(parents=True, exist_ok=True)
         self.file = self.dir / "profile.json"
         self.lock = threading.Lock()
-        self.data = {"name": "", "address": "", "onboarded": False, "recording": None, "contacts": []}
+        self.data = self._empty()
         if self.file.is_file():
             try:
                 self.data.update(json.loads(self.file.read_text(encoding="utf-8")))
@@ -38,6 +38,10 @@ class Onboarding:
                 pass
 
     # ---- helpers ----
+    @staticmethod
+    def _empty() -> dict:
+        return {"name": "", "address": "", "onboarded": False, "recording": None, "contacts": []}
+
     def _save(self):
         self.file.write_text(json.dumps(self.data, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -67,6 +71,7 @@ class Onboarding:
         streamer.add_post_route("/api/contacts/invited", self.mark_invited)
         streamer.add_post_route("/api/finish", self.finish)
         streamer.add_post_route("/api/reset", self.reset)
+        streamer.add_post_route("/api/profile/delete", self.delete_profile)
 
     # ---- GET ----
     def get_profile(self, query):
@@ -155,6 +160,16 @@ class Onboarding:
             if not self.data.get("recording") or not self.data.get("contacts"):
                 return _json({"error": "need a recording and at least one contact"}, 400)
             self.data["onboarded"] = True
+            self._save()
+        return _json({"ok": True})
+
+    def delete_profile(self, query, body, headers):
+        """Erase everything entered during onboarding, including the recording file."""
+        with self.lock:
+            rec = self.data.get("recording")
+            if rec and (self.dir / rec["file"]).is_file():
+                (self.dir / rec["file"]).unlink()
+            self.data = self._empty()
             self._save()
         return _json({"ok": True})
 

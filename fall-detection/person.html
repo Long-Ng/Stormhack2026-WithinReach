@@ -29,6 +29,10 @@
   #talkNote { text-align:center; color:var(--muted); font-size:.95rem; min-height:1.2em; }
   .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .grid button { background:var(--msg); font-size:1.15rem; padding:18px 8px; }
+  #delProfile { display:block; margin:18px auto 0; width:auto; padding:8px 14px; border-radius:10px;
+                font-size:.85rem; font-weight:600; background:transparent; color:var(--muted);
+                border:1px solid var(--line); }
+  #delProfile.confirm { color:var(--help); border-color:var(--help); }
   #toast { position:fixed; left:16px; right:16px; bottom:16px; padding:14px; border-radius:14px;
            background:var(--fg); color:var(--bg); text-align:center; font-weight:600; display:none; }
 </style>
@@ -58,6 +62,7 @@
   </div>
 
   <a id="call" class="btn" href="tel:{{CALL_NUMBER}}">📞 Call {{CALL_NUMBER}}</a>
+  <button id="delProfile">Delete profile</button>
   <div id="toast"></div>
 <script>
 const params = new URLSearchParams(location.search);
@@ -139,6 +144,19 @@ async function sendTalk() {
 $("talk").addEventListener("pointerdown", startTalk);
 ["pointerup", "pointercancel", "pointerleave"].forEach(e => $("talk").addEventListener(e, stopTalk));
 $("talk").addEventListener("contextmenu", e => e.preventDefault());
+
+// --- delete profile: tap twice within 4 s ------------------------------------------
+$("delProfile").onclick = async () => {
+  const b = $("delProfile");
+  if (!b.classList.contains("confirm")) {
+    b.classList.add("confirm"); b.textContent = "Tap again to delete name, address, recording and contacts";
+    clearTimeout(b.t); b.t = setTimeout(() => { b.classList.remove("confirm"); b.textContent = "Delete profile"; }, 4000);
+    return;
+  }
+  clearTimeout(b.t); b.disabled = true;
+  try { await post("/api/profile/delete"); toast("Profile deleted"); setTimeout(() => location.href = "/onboarding", 1200); }
+  catch (e) { b.disabled = false; toast("Could not delete the profile. Check the connection."); }
+};
 
 // --- live status ------------------------------------------------------------------
 async function poll() {
