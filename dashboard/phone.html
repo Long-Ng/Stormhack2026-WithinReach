@@ -43,6 +43,41 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;z-index:40;flex-direction:column;justify-content:center;padding:14px}
 .modal.on{display:flex}.modal img{width:100%;border-radius:14px}.modal p{color:#fff;text-align:center}
 .modal button{background:#fff;border:0;border-radius:12px;padding:13px;font-weight:800;font-size:15px}
+/* Mockup call flow: contact picker + call screen. Never dials a real number. */
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:50;align-items:flex-end}
+.sheet.on{display:flex}
+.sheet .pnl{background:#fff;width:100%;border-radius:24px 24px 0 0;padding:10px 16px calc(env(safe-area-inset-bottom) + 16px);max-height:80vh;overflow:auto}
+.sheet .grab{width:44px;height:5px;border-radius:3px;background:#d5dbd8;margin:4px auto 12px}
+.sheet h2{margin:0 0 4px;font-size:21px}.sheet .hint{color:var(--mut);font-size:14px;margin:0 0 10px}
+.ct{display:flex;align-items:center;gap:12px;width:100%;border:0;background:none;padding:12px 4px;border-bottom:1px solid #eef1ee;text-align:left;font:inherit;color:var(--ink)}
+.ct .av{width:46px;height:46px;border-radius:50%;background:var(--green);color:#fff;display:grid;place-items:center;font-weight:800;font-size:19px;flex:none}
+.ct.sos .av{background:var(--red)}
+.ct b{display:block;font-size:17px}.ct span{color:var(--mut);font-size:14px}
+.ct .ph{margin-left:auto;font-size:22px}
+.sheet .cancel{width:100%;margin-top:12px;border:0;border-radius:14px;padding:14px;font-weight:800;font-size:16px;background:#e9ece8;color:var(--ink)}
+.callscr{position:fixed;inset:0;z-index:60;display:none;flex-direction:column;align-items:center;justify-content:space-between;
+  padding:calc(env(safe-area-inset-top) + 70px) 24px calc(env(safe-area-inset-bottom) + 40px);
+  background:linear-gradient(170deg,#1d5c4c,#0e2621 70%);color:#fff;text-align:center}
+.callscr.on{display:flex}
+.callscr .big{width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.14);display:grid;place-items:center;font-size:50px;font-weight:800;margin:0 auto 18px}
+.callscr.ringing .big{animation:ring 1.4s infinite}
+@keyframes ring{0%{box-shadow:0 0 0 0 rgba(255,255,255,.35)}100%{box-shadow:0 0 0 34px rgba(255,255,255,0)}}
+.callscr h2{margin:0;font-size:30px}.callscr .num{opacity:.75;margin-top:4px}.callscr .stat{margin-top:14px;font-size:17px;opacity:.9;font-variant-numeric:tabular-nums}
+.callscr .ctl{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;width:100%;max-width:320px;margin:0 auto}
+.callscr .ctl button{border:0;background:rgba(255,255,255,.14);color:#fff;border-radius:50%;width:72px;height:72px;margin:0 auto;font-size:26px}
+.callscr .ctl button.act{background:#fff;color:#0e2621}
+.callscr .ctl small{display:block;font-size:12px;margin-top:6px;opacity:.85}
+.callscr .end{border:0;background:#e5484d;color:#fff;width:78px;height:78px;border-radius:50%;font-size:32px;margin-top:26px}
+.callscr .demo{font-size:12px;opacity:.55;margin-top:14px}
+/* Privacy view switch */
+.priv{display:flex;align-items:center;gap:14px;background:#fff;border-radius:22px;padding:14px 18px;margin-top:12px;cursor:pointer}
+.priv .txt{flex:1}.priv b{display:block;font-size:16px}.priv .txt span{display:block;color:var(--mut);font-size:14px;margin-top:3px;line-height:1.35}
+.priv input{position:absolute;opacity:0;pointer-events:none}
+.priv .sw{flex:none;width:52px;height:32px;border-radius:99px;background:#cfd6d2;position:relative;transition:background .2s}
+.priv .sw:after{content:"";position:absolute;top:3px;left:3px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .2s}
+.priv input:checked + .sw{background:var(--green)}.priv input:checked + .sw:after{left:23px}
+.priv input:focus-visible + .sw{outline:3px solid #9cc3b8;outline-offset:2px}
+.pill.priv-on{left:auto;right:12px;top:auto;bottom:12px;display:none}
 </style>
 </head>
 <body>
@@ -58,7 +93,13 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
     <img id="vid" alt="">
     <div class="vmsg" id="vmsg">Waiting for video from main.py...</div>
     <span class="tag" id="vtag"></span>
+    <span class="pill priv-on" id="privPill">&#128100; Outline only</span>
   </div>
+
+  <label class="priv" for="priv">
+    <span class="txt"><b>Privacy view</b><span id="privHint">Show them as a simple outline instead of the camera picture. Only the outline is shared, including alert photos and clips.</span></span>
+    <input type="checkbox" id="priv" role="switch" aria-describedby="privHint"><span class="sw"></span>
+  </label>
 
   <div class="voice" id="voice">&#128266; Your voice is playing in the room</div>
 
@@ -77,7 +118,33 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
 
 <div class="bar">
   <button id="talk">&#127908;<br>Hold to talk</button>
-  <a class="call" id="call" href="tel:911">&#128222;<br>Call 911</a>
+  <button class="call" id="call">&#128222;<br>Call</button>
+</div>
+
+<div class="sheet" id="sheet"><div class="pnl">
+  <div class="grab"></div>
+  <h2>Who do you want to call?</h2>
+  <p class="hint">Pick someone to call now.</p>
+  <div id="ctList"></div>
+  <button class="cancel" id="ctCancel">Cancel</button>
+</div></div>
+
+<div class="callscr" id="callscr">
+  <div>
+    <div class="big" id="cAv">?</div>
+    <h2 id="cName"></h2>
+    <div class="num" id="cNum"></div>
+    <div class="stat" id="cStat">Calling…</div>
+  </div>
+  <div style="width:100%">
+    <div class="ctl">
+      <div><button data-tg>&#128263;</button><small>Mute</small></div>
+      <div><button data-tg>&#128266;</button><small>Speaker</small></div>
+      <div><button data-tg>&#9000;</button><small>Keypad</small></div>
+    </div>
+    <button class="end" id="cEnd" aria-label="End call">&#128222;</button>
+    <div class="demo">Demo — no real call is made</div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -103,7 +170,7 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
   function toast(m){var t=$("toast");t.textContent=m;t.style.display="block";clearTimeout(t._h);t._h=setTimeout(function(){t.style.display="none";},3500);}
 
   function applyCfg(){
-    $("call").href="tel:"+cfg.phone; $("call").innerHTML="&#128222;<br>Call "+esc(cfg.phone);
+    $("call").innerHTML="&#128222;<br>Call";
   }
   fetch("/config.json").then(function(r){return r.json();}).then(function(c){cfg=Object.assign(cfg,c);applyCfg();render();}).catch(function(){});
 
@@ -185,6 +252,58 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
   function talkUp(){ tb.classList.remove("talking"); $("voice").style.display="none"; }
   tb.addEventListener("pointerdown",talkDown); tb.addEventListener("pointerup",talkUp); tb.addEventListener("pointercancel",talkUp); tb.addEventListener("pointerleave",talkUp);
   if(location.hash==="#talk") setTimeout(function(){toast("Two-way talk is not connected yet. Please call directly.");},800);
+
+  // ---- Call: contact picker, then a mock call screen (demo only, never dials) ----
+  var DEMO_CONTACTS=[{name:"Lan",relationship:"Daughter",phone:"0901 234 567"},{name:"Minh",relationship:"Son",phone:"0912 345 678"}];
+  var callTimer=null, callStart=0;
+  function contacts(){
+    var list=(cfg.contacts&&cfg.contacts.length)?cfg.contacts:DEMO_CONTACTS;
+    return list.concat([{name:"Emergency",relationship:"Emergency services",phone:cfg.phone||"911",sos:true}]);
+  }
+  function openPicker(){
+    $("ctList").innerHTML=contacts().map(function(c,i){
+      return '<button class="ct'+(c.sos?' sos':'')+'" data-ct="'+i+'"><span class="av">'+esc((c.name||"?").charAt(0).toUpperCase())+
+        '</span><span><b>'+esc(c.name)+'</b><span>'+esc(c.relationship||"")+' · '+esc(c.phone||"")+'</span></span><span class="ph">&#128222;</span></button>';
+    }).join("");
+    $("sheet").classList.add("on");
+  }
+  function closePicker(){ $("sheet").classList.remove("on"); }
+  function startCall(c){
+    closePicker();
+    $("cAv").textContent=(c.name||"?").charAt(0).toUpperCase(); $("cName").textContent=c.name;
+    $("cNum").textContent=(c.relationship?c.relationship+" · ":"")+(c.phone||"");
+    $("cStat").textContent="Calling…";
+    document.querySelectorAll("[data-tg]").forEach(function(b){b.classList.remove("act");});
+    var scr=$("callscr"); scr.className="callscr on ringing";
+    clearInterval(callTimer); callStart=0;
+    callTimer=setTimeout(function(){ // pretend the other side picks up
+      scr.classList.remove("ringing"); callStart=Date.now();
+      callTimer=setInterval(function(){var s=Math.floor((Date.now()-callStart)/1000);$("cStat").textContent=pad(Math.floor(s/60))+":"+pad(s%60);},250);
+    },3000);
+  }
+  function endCall(){
+    clearTimeout(callTimer); clearInterval(callTimer);
+    $("cStat").textContent="Call ended"; $("callscr").classList.remove("ringing");
+    setTimeout(function(){$("callscr").className="callscr";},900);
+  }
+  $("call").onclick=openPicker;
+  $("ctCancel").onclick=closePicker;
+  $("sheet").onclick=function(e){ if(e.target===$("sheet")) closePicker(); };
+  $("ctList").onclick=function(e){var b=e.target.closest("[data-ct]"); if(b) startCall(contacts()[+b.getAttribute("data-ct")]);};
+  $("cEnd").onclick=endCall;
+  document.querySelectorAll("[data-tg]").forEach(function(b){b.onclick=function(){b.classList.toggle("act");};});
+  // ---- Privacy view: one shared setting on the camera PC (it stops sending the camera picture) ----
+  function showPriv(on){ $("priv").checked=on; $("privPill").style.display=on?"block":"none"; }
+  function privHint(){ $("privHint").textContent="Show "+cfg.name+" as a simple outline instead of the camera picture. Only the outline is shared, including alert photos and clips."; }
+  function loadPriv(){ fetch("/api/privacy",{cache:"no-store"}).then(function(r){return r.json();}).then(function(j){showPriv(!!j.on);}).catch(function(){}); }
+  $("priv").onchange=function(){
+    var want=$("priv").checked;
+    fetch("/api/privacy?on="+(want?1:0),{method:"POST"}).then(function(r){return r.json();})
+      .then(function(j){showPriv(!!j.on); toast(j.on?"Privacy view on: only an outline is shown.":"Camera picture is back on.");})
+      .catch(function(){showPriv(!want); toast("Couldn't reach the camera. Try again.");});
+  };
+  loadPriv(); setInterval(loadPriv,5000);  // someone else may switch it
+  fetch("/config.json").then(function(r){return r.json();}).then(function(c){if(c.name)cfg.name=c.name;privHint();}).catch(function(){});
 
   video(); poll(); setInterval(poll,2000);
 })();
