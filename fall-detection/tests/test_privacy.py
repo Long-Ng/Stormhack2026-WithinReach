@@ -67,3 +67,23 @@ def test_clear_preroll_drops_frames_from_before_the_switch(tmp_path):
         frames.append(f)
     assert frames
     assert all(f[..., 0].mean() > f[..., 2].mean() for f in frames)  # no red camera frames
+
+
+def test_demo_switches_over_http(tmp_path):
+    from stream import Streamer
+    s = Streamer(port=5090, events_dir=tmp_path)
+    try:
+        base = "http://127.0.0.1:5090/api/demo"
+        assert json.load(urllib.request.urlopen(base)) == {"graph": False, "skeleton": False}
+        req = urllib.request.Request(base + "?graph=1&skeleton=1", data=b"", method="POST")
+        assert json.load(urllib.request.urlopen(req)) == {"graph": True, "skeleton": True}
+        assert s.demo == {"graph": True, "skeleton": True}
+    finally:
+        s.close()
+
+
+def test_demo_graph_without_a_phone_says_so():
+    from overlay import draw_phone_graph
+    f = np.full((480, 640, 3), 120, np.uint8)
+    draw_phone_graph(f, None)
+    assert f[-45, -20].mean() < 120  # dimmed panel with the message

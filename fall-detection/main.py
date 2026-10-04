@@ -38,7 +38,7 @@ from gemini import FallAnalyst, FrameHistory, GeminiClient, report_dict
 from zones import SceneScanner, SceneWatcher, ZoneStore, draw_zones
 from imu import open_wearable
 from inject import KEYS as INJECT_KEYS, ClipInjector
-from overlay import draw_overlay, draw_skeleton, draw_text, render_privacy_frame
+from overlay import draw_overlay, draw_phone_graph, draw_skeleton, draw_text, render_privacy_frame
 from pose import PoseEstimator
 from smoothing import SkeletonStabilizer
 
@@ -278,7 +278,14 @@ def main() -> int:
             view = render_privacy_frame(frame.shape, shown_lms, cfg.min_visibility) if private else frame
             if streamer is not None:  # clean frame, before the debug overlay is drawn
                 try:
-                    streamer.update(view)
+                    live = view
+                    if streamer.demo["graph"] or streamer.demo["skeleton"]:
+                        live = view.copy()  # demo overlays: live feed only, not snapshots or clips
+                        if streamer.demo["skeleton"] and not private and shown_lms is not None:
+                            draw_skeleton(live, shown_lms, cfg.min_visibility)
+                        if streamer.demo["graph"]:
+                            draw_phone_graph(live, wearable)
+                    streamer.update(live)
                 except Exception as e:
                     print(f"[dashboard] update failed: {e!r}", file=sys.stderr)
             feats = extractor.update(lms, ts_ms / 1000.0)

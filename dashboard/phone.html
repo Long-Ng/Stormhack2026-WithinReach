@@ -101,6 +101,15 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
     <input type="checkbox" id="priv" role="switch" aria-describedby="privHint"><span class="sw"></span>
   </label>
 
+  <label class="priv" for="demoGraph">
+    <span class="txt"><b>Show graph (for demo)</b><span>Draw the phone's motion graph on the live video, so you can see the impact of a fall.</span></span>
+    <input type="checkbox" id="demoGraph" role="switch"><span class="sw"></span>
+  </label>
+  <label class="priv" for="demoSkel">
+    <span class="txt"><b>Show skeleton (for demo)</b><span>Draw the body outline the camera tracks on top of the live video.</span></span>
+    <input type="checkbox" id="demoSkel" role="switch"><span class="sw"></span>
+  </label>
+
   <div class="voice" id="voice">&#128266; Your voice is playing in the room</div>
 
   <div class="card">
@@ -314,6 +323,17 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
       .catch(function(){showPriv(!want); toast("Couldn't reach the camera. Try again.");});
   };
   loadPriv(); setInterval(loadPriv,5000);  // someone else may switch it
+
+  // ---- Demo overlays (live video only): phone graph and skeleton ----
+  function showDemo(d){ $("demoGraph").checked=!!d.graph; $("demoSkel").checked=!!d.skeleton; }
+  function loadDemo(){ fetch("/api/demo",{cache:"no-store"}).then(function(r){return r.json();}).then(showDemo).catch(function(){}); }
+  function setDemo(key,on){
+    fetch("/api/demo?"+key+"="+(on?1:0),{method:"POST"}).then(function(r){return r.json();}).then(showDemo)
+      .catch(function(){ loadDemo(); toast("Couldn't reach the camera. Try again."); });
+  }
+  $("demoGraph").onchange=function(){ setDemo("graph",this.checked); };
+  $("demoSkel").onchange=function(){ setDemo("skeleton",this.checked); };
+  loadDemo(); setInterval(loadDemo,5000);
   fetch("/config.json").then(function(r){return r.json();}).then(function(c){if(c.name)cfg.name=c.name;cfg.gemini_falls=!!c.gemini_falls;cfg.gemini_scan=!!c.gemini_scan;privHint();}).catch(function(){});
 
   video(); poll(); setInterval(poll,2000);

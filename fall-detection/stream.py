@@ -89,11 +89,15 @@ class Streamer:
         # Privacy view: when on, main.py sends a stick-figure picture instead of the camera
         # image (live view, snapshots and clips). One shared setting for everyone watching.
         self.privacy = False
+        # Demo overlays on the live feed only (snapshots and clips stay clean), switched
+        # from the monitor page: the phone acceleration graph and the skeleton.
+        self.demo = {"graph": False, "skeleton": False}
         self._closed = False
         self.config = {}
         self.routes = {}       # path -> handler(query) -> (status, content_type, body); GET and POST
         self.post_routes = {}  # path -> handler(query, body, headers) -> (status, content_type, body); POST only
         self.routes["/api/privacy"] = self._privacy_route
+        self.routes["/api/demo"] = self._demo_route
         self.onboarding = None
         outer = self
 
@@ -225,6 +229,13 @@ class Streamer:
             print(f"[stream] onboarding data -> {HERE / 'data'}")
         except Exception as e:
             print(f"[stream] onboarding disabled: {e!r}")
+
+    def _demo_route(self, query):
+        """GET /api/demo -> {"graph": bool, "skeleton": bool}; POST ?graph=1&skeleton=0 sets them."""
+        for key in self.demo:
+            if key in query:
+                self.demo[key] = query[key] in ("1", "true", "on")
+        return 200, "application/json", json.dumps(self.demo).encode()
 
     def _privacy_route(self, query):
         """GET /api/privacy -> {"on": bool}; POST /api/privacy?on=1|0 switches it."""

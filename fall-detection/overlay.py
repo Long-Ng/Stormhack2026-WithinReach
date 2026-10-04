@@ -101,6 +101,17 @@ GRAPH_LINE = (120, 230, 120)
 GRAPH_THRESH = (80, 160, 255)
 
 
+def draw_phone_graph(frame: np.ndarray, wearable: Wearable | None) -> None:
+    """The phone graph for the demo overlay; says so when no phone sensor is set up."""
+    if wearable is not None:
+        draw_wearable(frame, wearable)
+        return
+    h, w = frame.shape[:2]
+    x0 = w - min(300, w // 2 - 20) - 10
+    frame[h - 60:h - 28, x0:w - 10] = (frame[h - 60:h - 28, x0:w - 10] * 0.3).astype(np.uint8)
+    draw_text(frame, "Phone sensor not connected", (x0 + 8, h - 38), WARN_COLOR, scale=0.5)
+
+
 def draw_wearable(frame: np.ndarray, wearable: Wearable) -> None:
     """Scrolling graph of the phone's acceleration (Phyphox), bottom right: the last
     GRAPH_S seconds, the impact threshold as a dashed line, detected impacts in red."""
