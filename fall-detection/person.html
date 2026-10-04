@@ -186,6 +186,31 @@ setInterval(() => {
   if (deadline === null) return;
   $("count").textContent = Math.max(0, Math.ceil(deadline - (Date.now() / 1000 - skew))) + " s";
 }, 250);
+// --- a detected fall opens /fallen ("We think you fell. Are you ok?"), which comes back here ---
+// Once per fall: remembered in the same list as the dashboard uses.
+const fallenSeen = (() => { try { return JSON.parse(localStorage.getItem("fd.fallen.seen")) || {}; } catch (e) { return {}; } })();
+function goFallen(key, qs) {
+  if (fallenSeen[key]) return false;
+  fallenSeen[key] = Date.now();
+  try { localStorage.setItem("fd.fallen.seen", JSON.stringify(fallenSeen)); } catch (e) {}
+  location.href = "/fallen?" + qs + "&back=" + encodeURIComponent("/granny");
+  return true;
+}
+async function checkFall() {
+  try {  // a hard shock to the phone (Phyphox)
+    const p = await (await fetch("/api/phone", { cache: "no-store" })).json();
+    const s = p && p.suspect;
+    if (s && s.t && goFallen("phone:" + s.t, `src=phone&t=${s.t}&g=${s.g}`)) return;
+  } catch (e) {}
+  try {  // a fall confirmed by the camera
+    const d = await (await fetch("/events.json", { cache: "no-store" })).json();
+    if (d && d.alert && d.events && d.events.length) {
+      const e = d.events.reduce((a, b) => (b.t > a.t ? b : a));
+      goFallen("cam:" + e.name, `src=camera&ev=${encodeURIComponent(e.name)}&t=${e.t}`);
+    }
+  } catch (e) {}
+}
+checkFall(); setInterval(checkFall, 1000);
 poll(); setInterval(poll, 2000);
 </script>
 </body>

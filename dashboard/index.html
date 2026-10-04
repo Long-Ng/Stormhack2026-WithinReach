@@ -1331,7 +1331,7 @@ fdDetect();
   function goFallen(key, qs){
     if(!isA || fallenSeen[key]) return;  // only the person's own device; the monitor stays on the dashboard
     fallenSeen[key] = Date.now(); sv("fd.fallen.seen", fallenSeen);
-    location.href = B() + "/fallen?" + qs;
+    location.href = B() + "/fallen?" + qs + "&back=%2F";  // /fallen returns to the dashboard
   }
   function checkCameraFall(){
     fetch(B()+"/events.json",{cache:"no-store"}).then(function(r){return r.json();}).then(function(d){
