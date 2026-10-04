@@ -231,7 +231,7 @@ canvas{display:block;margin:0 auto 18px;width:100%;max-width:300px;height:40px}
   $("start").onclick = function(){show("rec"); renderRec();};
   $("haveAcc").onclick = function(){
     api("/api/profile",{cache:"no-store"}).then(function(r){return r.json();}).then(function(p){
-      if(p.onboarded){ localStorage.setItem("fd.onboarded","1"); location.href = "/phone"; }
+      if(p.onboarded){ localStorage.setItem("fd.onboarded","1"); location.href = "/monitor"; }
       else toast(t("noProfile"));
     }).catch(function(){toast(t("noProfile"));});
   };
@@ -422,7 +422,7 @@ canvas{display:block;margin:0 auto 18px;width:100%;max-width:300px;height:40px}
       }).catch(function(){toast(t("saveFail"));});
     } else if(v){
       var cid = v.getAttribute("data-inv"), c = profile.contacts.filter(function(x){return x.id === cid;})[0]; if(!c) return;
-      var body = t("inviteBody").replace("{WHO}", profile.name || t("someone")).replace("{URL}", location.origin + "/phone");
+      var body = t("inviteBody").replace("{WHO}", profile.name || t("someone")).replace("{URL}", location.origin + "/monitor");
       c.invited = true;
       fetch("/api/contacts/invited?id="+encodeURIComponent(cid),{method:"POST"}).catch(function(){});
       renderWho();
@@ -432,7 +432,7 @@ canvas{display:block;margin:0 auto 18px;width:100%;max-width:300px;height:40px}
   $("finish").onclick = function(){
     var b = $("finish"); b.disabled = true;
     api("/api/finish",{method:"POST"}).then(function(){
-      localStorage.setItem("fd.onboarded","1"); location.href = "/phone";
+      localStorage.setItem("fd.onboarded","1"); location.href = "/monitor";
     }).catch(function(){ toast(t("needBoth")); b.disabled = false; });
   };
 

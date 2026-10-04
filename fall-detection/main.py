@@ -11,7 +11,8 @@ python main.py --port 5050                            # dashboard server port (d
 python main.py --no-dashboard                         # do not start the dashboard server
 python main.py --ntfy my-secret-topic --name Nick     # extra phone push through the ntfy app
 
-While running: desktop dashboard http://localhost:5000/ , phone page http://<PC address>:5000/phone
+While running: desktop dashboard http://localhost:5000/ , monitor page http://<PC address>:5000/monitor,
+               person page http://<PC address>:5000/granny
 """
 
 from __future__ import annotations

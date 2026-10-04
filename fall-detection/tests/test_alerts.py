@@ -46,7 +46,7 @@ def test_fall_notifies_person_with_reply_buttons():
     assert urls == [f"http://192.168.1.9:5000/respond?id={inc.id}&answer=ok",
                     f"http://192.168.1.9:5000/respond?id={inc.id}&answer=help",
                     "tel:+15550001111"]
-    assert msg["click"] == f"http://192.168.1.9:5000/person?id={inc.id}"
+    assert msg["click"] == f"http://192.168.1.9:5000/granny?id={inc.id}"
     assert inc.status == WAITING
 
 
@@ -123,9 +123,13 @@ def test_routes_over_real_server(tmp_path):
         req = urllib.request.Request(f"{base}/respond?id={inc_id}&answer=ok", data=b"", method="POST")
         assert urllib.request.urlopen(req).read() == b"Glad you're OK"
         assert only_incident(m).status == OK
-        page = urllib.request.urlopen(f"{base}/person?id={inc_id}").read().decode()
+        page = urllib.request.urlopen(f"{base}/granny?id={inc_id}").read().decode()
         assert "tel:+15550001111" in page and "{{CALL_NUMBER}}" not in page
         assert urllib.request.urlopen(base + "/events.json").status == 200  # old routes intact
+        # Old page names redirect, keeping the query (links in notifications already sent)
+        old = urllib.request.urlopen(f"{base}/person?id={inc_id}")
+        assert old.url == f"{base}/granny?id={inc_id}" and "tel:+15550001111" in old.read().decode()
+        assert urllib.request.urlopen(base + "/phone?skip=1").url == base + "/monitor?skip=1"
     finally:
         s.close()
 

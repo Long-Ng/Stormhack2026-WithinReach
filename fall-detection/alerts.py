@@ -160,7 +160,7 @@ class AlertManager:
         return {
             "/respond": self._route_respond,
             "/incidents.json": self._route_incidents,
-            "/person": self._route_person,
+            "/granny": self._route_person,
             "/message": self._route_message,
             "/voice": self._route_voice,
             "/messages.json": self._route_messages,
@@ -280,7 +280,7 @@ class AlertManager:
                         f"Otherwise your contact is alerted in {self.cfg.reply_timeout_s:.0f} s."),
             "priority": 5,
             "tags": ["rotating_light"],
-            "click": f"{self.base_url}/person?id={quote(inc.id)}",
+            "click": f"{self.base_url}/granny?id={quote(inc.id)}",
             "actions": actions,
         }
 
@@ -353,7 +353,7 @@ def demo() -> int:
     manager.send(FallEvent(timestamp=time.time(), kind="fall", peak_hip_vel=3.0,
                            torso_angle=95.0, snapshot_path=str(snaps[-1]) if snaps else None,
                            stream_t=0.0))
-    print(f"Fake fall sent. Person page: {manager.base_url}/person  (Ctrl+C to stop)")
+    print(f"Fake fall sent. Person page: {manager.base_url}/granny  (Ctrl+C to stop)")
     last = None
     try:
         while True:

@@ -2,7 +2,8 @@
 
 Tiny web server (default http://localhost:5000):
   /                desktop dashboard (dashboard/index.html or dashboard.html)
-  /phone           phone page (dashboard/phone.html); first visit goes through /onboarding
+  /monitor         monitor's phone page (dashboard/phone.html); first visit goes through /onboarding
+  /phone, /person  old names: redirect to /monitor and /granny
   /onboarding      onboarding flow (dashboard/onboarding.html); /onboarding?force=1 runs it again
   /config.json     name / room / address / emergency number (+ onboarding data when present)
   /video           live MJPEG stream
@@ -38,7 +39,8 @@ PHONE_PAGES = [HERE.parent / "dashboard" / "phone.html", HERE / "phone.html"]
 ONBOARDING_PAGES = [HERE.parent / "dashboard" / "onboarding.html", HERE / "onboarding.html"]
 MEDIA_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".mp4": "video/mp4", ".webm": "video/webm",
                ".avi": "video/x-msvideo"}
-MANIFEST = {"name": "Within Reach", "short_name": "Within Reach", "start_url": "/phone", "display": "standalone",
+OLD_PATHS = {"/phone": "/monitor", "/phone.html": "/monitor", "/person": "/granny"}
+MANIFEST = {"name": "Within Reach", "short_name": "Within Reach", "start_url": "/monitor", "display": "standalone",
             "background_color": "#f4f4f1", "theme_color": "#b3261e", "icons": []}
 
 # Old dashboards without the "no-inject" marker get this small panel added.
@@ -148,6 +150,8 @@ class Streamer:
             def do_GET(self):
                 path, _, qs = self.path.partition("?")
                 try:
+                    if path in OLD_PATHS:  # links in notifications already sent, bookmarks
+                        return self._redirect(OLD_PATHS[path] + ("?" + qs if qs else ""))
                     if self._route():
                         return
                     if path in ("/", "/dashboard", "/dashboard.html", "/index.html"):
@@ -158,7 +162,7 @@ class Streamer:
                         if "no-inject" not in html:
                             html = html.replace("</body>", INJECT + "</body>", 1) if "</body>" in html else html + INJECT
                         return self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
-                    if path in ("/phone", "/phone.html"):
+                    if path in ("/monitor", "/monitor.html"):
                         if outer.onboarding is not None and not outer.onboarding.done() and "skip" not in parse_qs(qs):
                             return self._redirect("/onboarding")
                         f = outer._find(PHONE_PAGES, "phone.html")
@@ -209,7 +213,7 @@ class Streamer:
         self.server = ThreadingHTTPServer(("0.0.0.0", port), H)
         self.server.daemon_threads = True
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
-        print(f"[stream] dashboard -> http://localhost:{port}/   phone page -> /phone   onboarding -> /onboarding")
+        print(f"[stream] dashboard -> http://localhost:{port}/   monitor page -> /monitor   onboarding -> /onboarding")
         print(f"[stream] events folder -> {self.events_path() or '(not created yet)'}")
         try:  # onboarding is optional: the server still runs without onboarding.py
             from onboarding import Onboarding
