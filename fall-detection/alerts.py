@@ -59,6 +59,7 @@ class Incident:
     replied_t: float | None = None
     reports: list[dict] = field(default_factory=list)  # Gemini analyses, oldest first
     sent_report: dict | None = None  # the last analysis the monitor was notified about
+    handled: bool = False       # the monitor tapped "Mark as handled": no more Gemini checks
 
 
 def lan_url(port: int) -> str:
@@ -132,9 +133,19 @@ class AlertManager:
 
     # --- Gemini analysis (gemini.FallAnalyst calls these) -----------------------------
     def is_open(self, incident_id: str) -> bool:
-        """Still worth analysing: not answered "I'm OK"."""
+        """Still worth analysing: not answered "I'm OK" and not marked handled."""
         inc = self.incidents.get(incident_id)
-        return inc is not None and inc.status != OK
+        return inc is not None and inc.status != OK and not inc.handled
+
+    def set_handled(self, snapshot: str, handled: bool) -> bool:
+        """The monitor page marks events by snapshot file name. Returns False if no
+        incident has that snapshot."""
+        with self._lock:
+            for inc in self.incidents.values():
+                if inc.snapshot == snapshot:
+                    inc.handled = handled
+                    return True
+        return False
 
     def add_report(self, incident_id: str, report: dict) -> None:
         """Store an analysis (gemini.report_dict); the latest one goes into the
@@ -195,7 +206,13 @@ class AlertManager:
             "/message": self._route_message,
             "/voice": self._route_voice,
             "/messages.json": self._route_messages,
+            "/api/handled": self._route_handled,
         }
+
+    def _route_handled(self, q):
+        """POST /api/handled?event=<snapshot name>&on=1|0 from the monitor page."""
+        found = self.set_handled(Path(q.get("event", "")).name, q.get("on", "1") in ("1", "true"))
+        return (200 if found else 404), "application/json", json.dumps({"ok": found}).encode()
 
     def upload_routes(self) -> dict:
         """POST routes that need the request body: handler(query, body, headers),

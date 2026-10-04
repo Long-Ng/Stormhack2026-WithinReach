@@ -206,6 +206,25 @@ class GeminiClient:
         self.api_key, self.model, self.timeout_s = api_key, model, timeout_s
         self.models = (model,) + tuple(m for m in fallback_models if m and m != model)
         self._sleep = sleep
+        # Real usage from each reply's usageMetadata, totalled since start (any thread).
+        self.usage = {"calls": 0, "input_tokens": 0, "output_tokens": 0}
+        self._usage_lock = threading.Lock()
+
+    def record_usage(self, model: str, reply: dict) -> None:
+        """Add one reply's usageMetadata to the totals and print it, so the real cost of
+        a fall (video first look + one update a minute) is visible, not estimated."""
+        meta = reply.get("usageMetadata") or {}
+        n_in = int(meta.get("promptTokenCount", 0))
+        n_out = int(meta.get("candidatesTokenCount", 0)) + int(meta.get("thoughtsTokenCount", 0))
+        with self._usage_lock:
+            u = self.usage
+            u["calls"] += 1
+            u["input_tokens"] += n_in
+            u["output_tokens"] += n_out
+            total = u["input_tokens"] + u["output_tokens"]
+            calls = u["calls"]
+        print(f"[gemini] {model}: {n_in} in + {n_out} out tokens "
+              f"(since start: {calls} calls, {total} tokens)", flush=True)
 
     def request_body(self, prompt: str, frames: list[tuple[float, np.ndarray]]) -> dict:
         return {
@@ -269,6 +288,7 @@ class GeminiClient:
             headers={"Content-Type": "application/json", "x-goog-api-key": self.api_key})
         with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
             out = json.loads(resp.read())
+        self.record_usage(model, out)
         text = out["candidates"][0]["content"]["parts"][0]["text"]
         return json.loads(text)
 

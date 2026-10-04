@@ -240,7 +240,9 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
     var ev=events.filter(function(x){return x.name===t.getAttribute("data-ev");})[0]; if(!ev)return;
     $("mImg").src=ev.url; $("mTxt").textContent=kind(ev.kind)+" · "+full(ev.t); $("modal").classList.add("on");});
   $("mClose").onclick=function(){$("modal").classList.remove("on");};
-  $("handled").onclick=function(){var l=latest();if(!l)return; if(handled[l.name]) delete handled[l.name]; else handled[l.name]=1; localStorage.setItem("fd.phone.handled",JSON.stringify(handled)); render();};
+  $("handled").onclick=function(){var l=latest();if(!l)return; if(handled[l.name]) delete handled[l.name]; else handled[l.name]=1; localStorage.setItem("fd.phone.handled",JSON.stringify(handled)); render();
+    // Also tell the camera PC, so it stops the Gemini check-ins for this fall.
+    fetch("/api/handled?event="+encodeURIComponent(l.name)+"&on="+(handled[l.name]?1:0),{method:"POST"}).catch(function(){});};
   $("settings").onclick=function(){
     if(window.Notification&&Notification.permission==="default") Notification.requestPermission();
     beep(); if(navigator.vibrate) navigator.vibrate(200);
