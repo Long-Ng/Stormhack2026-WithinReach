@@ -92,6 +92,9 @@ ntfy_attach_snapshot = true   # monitor notification shows the snapshot
 reply_timeout_s = 30.0        # person has this long to answer before the monitor is alerted
 room_name = "Living room"
 public_url = ""               # empty = http://<this PC's Wi-Fi IP>:<port>
+# Phones: scan the QR codes printed at startup (or open /connect on the laptop), or type
+# http://within-reach.local:<port>/monitor. With --port 80 the ":<port>" can be left out.
+mdns_name = "within-reach"   # "" turns the .local name off
 
 [gemini]
 # Gemini describes each confirmed fall (type, position, movement) and the monitor gets

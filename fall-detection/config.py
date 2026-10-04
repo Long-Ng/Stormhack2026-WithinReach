@@ -91,6 +91,7 @@ class Config:
     person_number: str = ""  # "Call person" button on the monitor's phone
     room_name: str = "Living room"
     public_url: str = ""  # address phones use to reach this PC; empty = http://<LAN IP>:<port>
+    mdns_name: str = "within-reach"  # phones can open http://within-reach.local; "" = off
 
     # Gemini fall analysis: frames of a confirmed fall go to Google. Off without a key.
     gemini_api_key: str = ""  # put in params.local.toml (gitignored) or env GEMINI_API_KEY

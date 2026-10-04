@@ -27,7 +27,7 @@ import time
 import cv2
 
 from camera import open_source
-from alerts import open_alerts
+from alerts import lan_url, open_alerts
 from clips import ClipRecorder
 from config import Config
 from cover import CoverReset
@@ -108,6 +108,27 @@ def handle_detection(detection, frame, lms, cfg: Config, sinks, streamer=None,
             print(f"dashboard alert failed: {e!r}", file=sys.stderr)
 
 
+def start_phone_links(streamer, cfg: Config, port: int):
+    """QR codes and the within-reach.local name, so nobody types an IP address."""
+    if streamer is None:
+        return None
+    from phone_links import LocalName, connect_page, print_qr_codes, qr_png
+    base = (cfg.public_url or lan_url(port)).rstrip("/")
+    local = None
+    if cfg.mdns_name and not cfg.public_url:
+        local = LocalName(cfg.mdns_name, base.split("//")[1].split(":")[0], port)
+        if not local.start():
+            local = None
+    local_url = local.url if local else None
+    streamer.add_route("/connect", lambda q: (200, "text/html; charset=utf-8",
+                                              connect_page(base, local_url)))
+    streamer.add_route("/qr.png", lambda q: (200, "image/png", qr_png(
+        base + (q.get("path") if q.get("path") in ("/monitor", "/granny") else "/monitor"))))
+    print_qr_codes(base, local_url)
+    print(f"[phones] QR codes on screen: http://localhost:{port}/connect")
+    return local
+
+
 def start_dashboard(args, cfg: Config):
     """Start the dashboard/video server. Never lets a dashboard problem stop the detector."""
     try:
@@ -146,6 +167,7 @@ def main() -> int:
     print(f"Using {source.label}")
 
     streamer = None if args.no_dashboard else start_dashboard(args, cfg)
+    local_name = start_phone_links(streamer, cfg, args.port)
     if streamer is not None:
         streamer.privacy = cfg.privacy_view
 
@@ -388,6 +410,8 @@ def main() -> int:
         wearable.close()
     if streamer is not None:
         streamer.close()
+    if local_name is not None:
+        local_name.close()
     cap.release()
     cv2.destroyAllWindows()
     return 0
