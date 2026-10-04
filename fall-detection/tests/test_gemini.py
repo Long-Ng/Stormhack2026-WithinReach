@@ -23,8 +23,8 @@ def test_collapse_is_urgent():
 
 
 def test_still_for_five_minutes_is_urgent():
-    assert guidance(report(movement="still"), 2)[0] == MEDIUM
-    level, text = guidance(report(movement="still"), 5)
+    assert guidance(report(movement="still"), still_minutes=2)[0] == MEDIUM
+    level, text = guidance(report(movement="still"), still_minutes=5)
     assert level == URGENT and "5+ minutes" in text
 
 
@@ -43,11 +43,11 @@ def test_up_or_not_a_fall_is_low():
 def test_not_a_fall_but_on_the_floor_is_never_low():
     on_floor = report(is_fall=False, fall_type="not_a_fall", position="on_back", movement="still")
     assert guidance(on_floor, 0)[0] == MEDIUM
-    assert guidance(on_floor, 5)[0] == URGENT  # still not moving 5 minutes later
+    assert guidance(on_floor, still_minutes=5)[0] == URGENT  # still not moving 5 minutes later
 
 
 def test_emergency_number_is_configurable():
-    assert "Call 112 now" in guidance(report(fall_type="collapse"), 0, emergency="112")[1]
+    assert "Call 112 now" in guidance(report(fall_type="collapse"), emergency="112")[1]
 
 
 # --- parsing and the request ---------------------------------------------------------------
@@ -92,7 +92,7 @@ class FakeClient:
 def analyst(is_open=lambda _id: True):
     client, got = FakeClient(), []
 
-    def on_report(inc_id, r, minutes):
+    def on_report(inc_id, r, minutes, still):
         got.append((inc_id, minutes))
         client.done.release()
     a = FallAnalyst(client, on_report, is_open=is_open, update_s=300.0, max_updates=2)
@@ -137,7 +137,9 @@ def test_reports_reach_the_monitor_once_alerted():
     assert len(sent) == 1  # monitor not alerted yet: stored only
     m.respond(inc_id, HELP)
     assert "fainted" in sent[-1]["message"] and "Automated guidance" in sent[-1]["message"]
-    m.add_report(inc_id, report_dict(report(movement="still"), 5.0))
+    sent_t = m.incidents[inc_id].sent_report["t"]
+    m.add_report(inc_id, report_dict(report(movement="still"), 5.0, still_minutes=5.0)
+                 | {"t": sent_t + 300})
     assert sent[-1]["title"].startswith("Update, 5 min") and sent[-1]["priority"] == 5
     assert json.loads(json.dumps(m.incidents[inc_id].reports))  # served in /incidents.json
     m.respond(inc_id, OK)
@@ -220,7 +222,7 @@ class VideoClient:
 def first_report(video_fails):
     client, got = VideoClient(video_fails), []
 
-    def on_report(inc_id, r, minutes):
+    def on_report(inc_id, r, minutes, still):
         got.append(r)
         client.done.release()
     FallAnalyst(client, on_report).start("inc1", history_10fps(), 111.9)
@@ -238,29 +240,74 @@ def test_first_look_falls_back_to_eight_images():
     assert used == ["video", "images:8"] and r.fall_type == "sideways"
 
 
-def test_checks_every_minute_notify_only_on_change_or_every_five_minutes():
+def test_checks_every_minute_notify_every_five_minutes_or_when_urgent():
     cfg = Config(ntfy_person_topic="person-x", ntfy_monitor_topic="monitor-x", gemini_notify_s=300.0)
     sent = []
     m = AlertManager(cfg, "http://pc:5000", sent.append, clock=lambda: 1_700_000_000.0)
     m.send(FallEvent(timestamp=1_700_000_000.0, kind="fall", peak_hip_vel=3, torso_angle=90,
                      snapshot_path=None, stream_t=1))
     inc_id = m.last_incident_id
-    m.respond(inc_id, HELP)                       # monitor alerted
+    m.add_report(inc_id, report_dict(report(), 0.0) | {"t": 1_700_000_000.0})  # first look
+    m.respond(inc_id, HELP)                       # monitor alerted, with the first look in it
     alerted = len(sent)
 
-    def check(minute, **kw):
-        r = report_dict(report(**kw), minute) | {"t": 1_700_000_000.0 + minute * 60}
-        m.add_report(inc_id, r)
+    still_since = {}
 
-    check(1, movement="small_movements")          # first update: sent
-    check(2, movement="small_movements")          # same state, 1 min later: quiet
-    check(3, movement="small_movements")          # quiet
-    check(4, movement="still")                    # changed: sent at once
-    check(5, movement="still")                    # still 5 min -> urgent: sent at once
-    check(6, movement="still")                    # quiet
-    check(10, movement="still")                   # same, but 5 min since the last one: sent
-    titles = [s["title"] for s in sent[alerted:]]
-    assert [t.split(" - ")[0].split(", ")[1] for t in titles] == [
-        "1 min after the fall", "4 min after the fall", "5 min after the fall", "10 min after the fall"]
-    assert sent[alerted + 2]["priority"] == 5      # the escalation is loud
-    assert len(m.incidents[inc_id].reports) == 7   # every check is still kept
+    def check(minute, **kw):
+        r = report(**kw)
+        since = still_since.setdefault("s", minute) if r.movement == "still" else still_since.clear()
+        still = minute - since if r.movement == "still" else 0.0
+        m.add_report(inc_id, report_dict(r, minute, still_minutes=still)
+                     | {"t": 1_700_000_000.0 + minute * 60})
+
+    for minute in (1, 2, 3, 4):                   # changes, but under 5 min: quiet
+        check(minute, movement="trying_to_get_up" if minute % 2 else "small_movements")
+    check(5, movement="small_movements")          # 5 min since the alert: sent
+    check(6, movement="still")                    # still for 0 min: quiet
+    check(9, movement="still")                    # 3 min: quiet
+    check(11, movement="still")                   # still 5 min -> urgent: sent at once
+    check(12, movement="still")                   # still urgent: quiet
+    check(16, movement="still")                   # 5 min since the last one: sent
+    minutes = [s["title"].split(", ")[1].split(" min")[0] for s in sent[alerted:]]
+    assert minutes == ["5", "11", "16"]
+    assert sent[alerted + 1]["priority"] == 5     # the escalation is loud
+    assert len(m.incidents[inc_id].reports) == 11  # every check is still kept
+
+
+def test_urgent_can_wait_for_the_five_minutes_too():
+    cfg = Config(ntfy_person_topic="p", ntfy_monitor_topic="m", gemini_notify_urgent_now=False)
+    sent = []
+    m = AlertManager(cfg, "http://pc:5000", sent.append, clock=lambda: 1_700_000_000.0)
+    m.send(FallEvent(timestamp=1_700_000_000.0, kind="fall", peak_hip_vel=3, torso_angle=90,
+                     snapshot_path=None, stream_t=1))
+    inc_id = m.last_incident_id
+    m.respond(inc_id, HELP)
+    m.add_report(inc_id, report_dict(report(), 1) | {"t": 1_700_000_060.0})
+    n = len(sent)
+    m.add_report(inc_id, report_dict(report(fall_type="collapse"), 2) | {"t": 1_700_000_120.0})
+    assert len(sent) == n
+
+
+def test_still_time_counts_consecutive_still_checks_only():
+    moves = iter(["still", "still", "small_movements", "still", "still", "still"])
+    done, got = threading.Semaphore(0), []
+
+    class Seq:
+        def analyze_video(self, *a):
+            return report(movement=next(moves))
+
+        def analyze(self, frames, minutes=None):
+            return report(movement=next(moves))
+
+    def on_report(inc_id, r, minutes, still):
+        got.append((round(minutes), round(still)))
+        done.release()
+    a = FallAnalyst(Seq(), on_report, update_s=60.0, max_updates=60)
+    h = history_10fps()
+    a.start("inc1", h, 111.9)
+    for minute in (1, 2, 3, 4, 5):
+        a.tick(h, 111.9 + minute * 60)
+    for _ in range(6):
+        assert done.acquire(timeout=10)
+    # still at 0 and 1, moved at 2, still again from 3
+    assert got == [(0, 0), (1, 1), (2, 0), (3, 0), (4, 1), (5, 2)]

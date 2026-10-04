@@ -92,7 +92,7 @@ def main() -> int:
             except Exception as e:
                 print(f"{rel}: gemini failed: {e!r}", file=sys.stderr)
                 continue
-            level, text = guidance(r, 0.0, cfg.emergency_number)
+            level, text = guidance(r, 0.0, cfg.emergency_number)  # first look: no still time yet
             row = {"video": rel, "truth_fall": truth, "t": round(t, 2), "mode": mode, **vars(r),
                    "urgency": level, "guidance": text}
             rows.append(row)

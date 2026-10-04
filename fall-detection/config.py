@@ -97,7 +97,8 @@ class Config:
     gemini_model: str = "gemini-3.8-flash"
     gemini_fallback_model: str = "gemini-3.5-flash-lite"  # tried when the main one is overloaded
     gemini_update_s: float = 60.0  # Gemini checks on the person this often while the incident is open
-    gemini_notify_s: float = 300.0  # unchanged updates reach the monitor at most this often
+    gemini_notify_s: float = 300.0  # the monitor gets an analysis at most this often
+    gemini_notify_urgent_now: bool = True  # ...except when it turns urgent: at once
     gemini_max_minutes: float = 60.0  # stop checking this long after the fall
     emergency_number: str = "911"  # used in the guidance text ("Call 911 now")
 

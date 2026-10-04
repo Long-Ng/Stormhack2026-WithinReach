@@ -108,8 +108,10 @@ ON_FLOOR = {"on_back", "face_down", "on_side", "sitting_on_floor"}
 _RANK = {URGENT: 3, HIGH: 2, MEDIUM: 1, LOW: 0}
 
 
-def guidance(r: FallReport, minutes_since_fall: float, emergency: str = "911") -> tuple[str, str]:
-    """(urgency, instruction for the monitor) from the report's categories."""
+def guidance(r: FallReport, still_minutes: float = 0.0,
+             emergency: str = "911") -> tuple[str, str]:
+    """(urgency, instruction for the monitor) from the report's categories.
+    still_minutes: how long consecutive checks have seen them not moving."""
     head = (HIGH, "Their head may have hit the floor. Ask them to stay still. "
                   f"Call {emergency} if they are confused, drowsy, vomiting or bleeding.")
     if r.movement == "up_and_moving" or r.position == "standing":
@@ -127,8 +129,8 @@ def guidance(r: FallReport, minutes_since_fall: float, emergency: str = "911") -
         rules.append((URGENT, f"They may have fainted or lost consciousness. Call {emergency} now."))
     if r.position == "face_down" and r.movement == "still":
         rules.append((URGENT, f"Face down and not moving. Call {emergency} now."))
-    if r.movement == "still" and minutes_since_fall >= 5:
-        rules.append((URGENT, f"Not moving for {minutes_since_fall:.0f}+ minutes. Call {emergency}."))
+    if r.movement == "still" and still_minutes >= 5:
+        rules.append((URGENT, f"Not moving for {still_minutes:.0f}+ minutes. Call {emergency}."))
     if r.head_struck_likely == "yes":
         rules.append(head)
     if r.fall_type == "sideways":
@@ -314,12 +316,14 @@ class FallAnalyst:
     updates when the person answered "I'm OK".
     """
 
-    def __init__(self, client: GeminiClient, on_report: Callable[[str, FallReport, float], None],
+    def __init__(self, client: GeminiClient,
+                 on_report: Callable[[str, FallReport, float, float], None],
                  is_open: Callable[[str], bool] = lambda _id: True,
                  update_s: float = 60.0, max_updates: int = 60):
         self.client, self.on_report, self.is_open = client, on_report, is_open
         self.update_s, self.max_updates = update_s, max_updates
         self.watches: dict[str, _Watch] = {}
+        self._still_since: dict[str, float] = {}  # worker thread: minute they were first seen still
         self._q: queue.Queue = queue.Queue()
         threading.Thread(target=self._run, name="gemini", daemon=True).start()
 
@@ -355,7 +359,13 @@ class FallAnalyst:
                 print(f"[gemini] analysis failed: {e!r}", file=sys.stderr, flush=True)
                 continue
             try:
-                self.on_report(inc_id, report, 0.0 if minutes is None else minutes)
+                minutes = 0.0 if minutes is None else minutes
+                if report.movement == "still":
+                    since = self._still_since.setdefault(inc_id, minutes)
+                else:  # moving again: the still count starts over
+                    self._still_since.pop(inc_id, None)
+                    since = minutes
+                self.on_report(inc_id, report, minutes, minutes - since)
             except Exception as e:
                 print(f"[gemini] report handler failed: {e!r}", file=sys.stderr, flush=True)
 
@@ -370,7 +380,8 @@ def first_look(client: GeminiClient, clip: list[tuple[float, bytes]]) -> FallRep
         return None
 
 
-def report_dict(r: FallReport, minutes: float, emergency: str = "911") -> dict:
-    level, text = guidance(r, minutes, emergency)
+def report_dict(r: FallReport, minutes: float, emergency: str = "911",
+                still_minutes: float = 0.0) -> dict:
+    level, text = guidance(r, still_minutes, emergency)
     return asdict(r) | {"urgency": level, "guidance": text, "minutes": round(minutes, 1),
-                        "t": time.time()}
+                        "still_minutes": round(still_minutes, 1), "t": time.time()}

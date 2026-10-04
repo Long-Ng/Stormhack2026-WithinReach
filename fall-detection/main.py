@@ -180,8 +180,8 @@ def main() -> int:
         history = FrameHistory()
         analyst = FallAnalyst(
             GeminiClient(gemini_key, cfg.gemini_model, fallback_models=(cfg.gemini_fallback_model,)),
-            on_report=lambda inc_id, r, minutes: manager.add_report(
-                inc_id, report_dict(r, minutes, cfg.emergency_number)),
+            on_report=lambda inc_id, r, minutes, still: manager.add_report(
+                inc_id, report_dict(r, minutes, cfg.emergency_number, still)),
             is_open=manager.is_open, update_s=cfg.gemini_update_s,
             max_updates=int(cfg.gemini_max_minutes * 60 / cfg.gemini_update_s))
         print(f"[gemini] fall analysis on ({cfg.gemini_model}), "

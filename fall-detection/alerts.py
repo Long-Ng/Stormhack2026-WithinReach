@@ -137,10 +137,10 @@ class AlertManager:
         return inc is not None and inc.status != OK
 
     def add_report(self, incident_id: str, report: dict) -> None:
-        """Store an analysis (gemini.report_dict); the first one goes into the monitor's
-        alert. Once alerted, the monitor is notified when position, movement or urgency
-        changed, and otherwise at most every gemini_notify_s, so a check every minute
-        does not mean a notification every minute."""
+        """Store an analysis (gemini.report_dict); the latest one goes into the
+        monitor's alert. After that the monitor gets one at most every gemini_notify_s,
+        so a check every minute is not a notification every minute. The exception is
+        the situation turning urgent, which is sent at once (gemini_notify_urgent_now)."""
         with self._lock:
             inc = self.incidents.get(incident_id)
             if inc is None:
@@ -149,7 +149,9 @@ class AlertManager:
             if inc.status not in (HELP, NO_REPLY):
                 return
             last = inc.sent_report
-            if last is not None and _same_state(last, report) and \
+            became_urgent = (self.cfg.gemini_notify_urgent_now and report["urgency"] == "urgent"
+                             and (last is None or last["urgency"] != "urgent"))
+            if last is not None and not became_urgent and \
                     report["t"] - last["t"] < self.cfg.gemini_notify_s:
                 return
             inc.sent_report = report
@@ -364,10 +366,6 @@ class AlertManager:
 
     def _dashboard_url(self, inc: Incident) -> str:
         return f"{self.base_url}/?event={quote(inc.snapshot)}" if inc.snapshot else f"{self.base_url}/"
-
-
-def _same_state(a: dict, b: dict) -> bool:
-    return all(a.get(k) == b.get(k) for k in ("position", "movement", "urgency"))
 
 
 def _hhmm(t: float) -> str:
