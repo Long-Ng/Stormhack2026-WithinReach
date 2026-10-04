@@ -258,6 +258,24 @@ body[data-device=mobile] .mbox{border-radius:20px 20px 0 0;width:100%;max-height
 }
 body.touch nav a:hover:not(.on){background:transparent}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+/* Ported from index.html: phone motion graph, Gemini analysis, demo buttons */
+.pgraph{display:flex;flex-direction:column;min-height:170px}
+.pgraph .head{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}.pgraph h3{margin:0;font-size:1rem}
+.pgraph .now{margin-left:auto;color:var(--mut);font-size:.82rem;font-variant-numeric:tabular-nums}
+.pgraph .plot{flex:1;position:relative;min-height:110px}
+.pgraph canvas{position:absolute;inset:0;width:100%;height:100%}
+.pgraph .na{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:var(--mut);font-size:.88rem;background:#f7f8f5;border-radius:12px;padding:8px}
+.ai{margin:4px 0 12px;padding:12px 14px;background:#fff;border:1px solid #efd48c;border-radius:14px}
+.ai-head{display:flex;align-items:center;gap:8px;font-size:.75rem;color:var(--mut);margin-bottom:6px;flex-wrap:wrap}
+.ai-tag{border-radius:999px;padding:2px 9px;font-weight:800;font-size:.7rem;letter-spacing:.04em;color:#fff;background:var(--mut)}
+.ai-tag.urgent{background:var(--red)}.ai-tag.high{background:#c2410c}.ai-tag.medium{background:var(--amber)}.ai-tag.low{background:var(--green)}
+.ai p{margin:0 0 6px;font-size:.88rem}.ai .ai-do{font-weight:600}
+.ai ol{margin:6px 0 0;padding-left:18px;color:var(--mut);font-size:.75rem}
+.ai small{display:block;color:var(--mut);font-size:.7rem;margin-top:6px}
+.ff{border:1px solid #efd48c;background:#fff;color:var(--warm-t);border-radius:10px;padding:8px 12px;font-weight:700;font-size:.82rem;cursor:pointer}
+.ff.on{background:var(--warm-t);color:#fff;border-color:var(--warm-t)}
+.noticed .ff{margin:0 0 12px}
+.demobar{display:flex;gap:10px;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -391,6 +409,14 @@ fdDetect();
           <div class="vmsg" id="vmsg" data-t="waitVideo"></div>
           <span class="vtag" id="vtag"></span>
         </div>
+        <div class="card pgraph">
+          <div class="head"><h3 data-t="phoneT"></h3><span class="now" id="pgNow"></span></div>
+          <div class="plot"><canvas id="pgCanvas"></canvas><div class="na" id="pgNa"></div></div>
+        </div>
+        <div class="demobar">
+          <button class="ff" id="graphBtn"></button>
+          <button class="ff" id="skelBtn"></button>
+        </div>
         <div class="voice" id="voice" data-t="voice"></div>
         <div class="card"><small class="cap" data-t="updates"></small><div id="updates"></div></div>
       </div>
@@ -411,6 +437,14 @@ fdDetect();
         <div class="noticed">
           <small data-t="noticed"></small>
           <h4 id="nTitle"></h4><p id="nBody"></p>
+          <div class="ai" id="aiBox" style="display:none">
+            <div class="ai-head"><span class="ai-tag" id="aiUrg"></span><span id="aiWhen"></span></div>
+            <p id="aiDesc"></p>
+            <p class="ai-do"><span data-t="aiDoL"></span> <span id="aiDo"></span></p>
+            <ol id="aiHist"></ol>
+            <small data-t="aiFoot"></small>
+          </div>
+          <button class="ff" id="ffBtn" style="display:none"></button>
           <a id="nLink" style="display:none"></a>
         </div>
       </div>
@@ -523,7 +557,11 @@ fdDetect();
       shots:"Saved moments",noShots:"No snapshots yet.",dl:"Download image",
       sName:"Monitored person's name",sRoom:"Room / camera name",sAddr:"Home address",sPhone:"Emergency number",sCd:"Call-suggestion countdown (seconds, 0 = off)",sBase:"main.py server address (blank = same as this page)",
       saveB:"Save",soundB:"Enable sound & notifications",soundOn:"Sound and vibration are on while this page is open.",device:"Device: ",mobile:"phone",tablet:"tablet",desktop:"desktop",
-      sAgo:"s ago",mAgo:" min ago",hAgo:" h ago",pageLive:"Live camera"}
+      sAgo:"s ago",mAgo:" min ago",hAgo:" h ago",pageLive:"Live camera",
+      phoneT:"Phone motion (Phyphox)",phoneNa:"Phone graph unavailable",phoneWait:"waiting for data from the phone",phoneNoConn:"no connection to main.py",gNow:" g now",
+      showGraph:"📈 Show Graph (For Demo)",hideGraph:"📈 Hide Graph",showSkel:"🧍 Show Skeleton (For Demo)",hideSkel:"🧍 Hide Skeleton",
+      ffOn:"⏩ Fast Forward (For Demo)",ffOff:"⏸ Normal speed",
+      aiDoL:"What to do:",aiFoot:"Gemini analysis · automated guidance. If in doubt, call 911.",aiAtFall:"When the fall was confirmed",aiMin:" min after the fall"}
   };
   function ld(k, d){try{var v=JSON.parse(localStorage.getItem(k)); return v==null?d:v;}catch(e){return d;}}
   function sv(k, v){try{localStorage.setItem(k, JSON.stringify(v));}catch(e){}}
@@ -1048,6 +1086,92 @@ fdDetect();
     fetch(B()+"/config.json").then(function(r){return r.json();}).then(function(c){cfg=Object.assign(cfg,c||{});}).catch(function(){}),
     loadProfile()
   ]).then(function(){ applyLang(); route(); });
+  // ============== ported from index.html: demo buttons, phone graph, Gemini box ==============
+  // Demo overlays on the live video: one shared setting on the camera PC (the monitor
+  // phone page has the same switches).
+  function showDemo(d){
+    $("graphBtn").classList.toggle("on", !!d.graph); $("graphBtn").textContent = t(d.graph ? "hideGraph" : "showGraph");
+    $("skelBtn").classList.toggle("on", !!d.skeleton); $("skelBtn").textContent = t(d.skeleton ? "hideSkel" : "showSkel");
+  }
+  function loadDemo(){ fetch(B()+"/api/demo",{cache:"no-store"}).then(function(r){return r.json();}).then(showDemo).catch(function(){}); }
+  function toggleDemo(key, btn){
+    fetch(B()+"/api/demo?" + key + "=" + (btn.classList.contains("on") ? 0 : 1), {method:"POST"})
+      .then(function(r){return r.json();}).then(showDemo).catch(loadDemo);
+  }
+  $("graphBtn").onclick = function(){ toggleDemo("graph", this); };
+  $("skelBtn").onclick = function(){ toggleDemo("skeleton", this); };
+  showDemo({}); loadDemo(); setInterval(loadDemo, 5000);
+
+  // Fast Forward: the per-minute Gemini checks come every 2 s (shown only when Gemini runs).
+  function showFast(fast){
+    $("ffBtn").style.display = "inline-block"; $("ffBtn").classList.toggle("on", fast);
+    $("ffBtn").textContent = t(fast ? "ffOff" : "ffOn");
+  }
+  fetch(B()+"/api/demo/speed",{cache:"no-store"}).then(function(r){ if(!r.ok) throw 0; return r.json(); })
+    .then(function(d){ showFast(!!d.fast); }).catch(function(){});
+  $("ffBtn").onclick = function(){
+    var fast = !$("ffBtn").classList.contains("on");
+    fetch(B()+"/api/demo/speed?fast=" + (fast ? 1 : 0), {method:"POST"})
+      .then(function(r){return r.json();}).then(function(d){ showFast(!!d.fast); }).catch(function(){});
+  };
+
+  // Gemini analysis of the newest incident, in "What we noticed so far".
+  function words(s){ return String(s||"").replace(/_/g," "); }
+  function renderAI(j){
+    var inc = (j.incidents || []).slice(-1)[0], reps = inc ? (inc.reports || []) : [];
+    var r = reps[reps.length-1];
+    $("aiBox").style.display = r ? "block" : "none";
+    if(!r) return;
+    $("aiUrg").textContent = String(r.urgency||"").toUpperCase(); $("aiUrg").className = "ai-tag " + r.urgency;
+    $("aiWhen").textContent = (r.minutes < 0.5 ? t("aiAtFall") : Math.round(r.minutes) + t("aiMin"))
+      + " · " + words(r.position) + ", " + words(r.movement);
+    $("aiDesc").textContent = r.description; $("aiDo").textContent = r.guidance;
+    $("aiHist").innerHTML = reps.slice(-5, -1).reverse().map(function(x){
+      return "<li>" + Math.round(x.minutes) + " min: " + esc(words(x.position)) + ", " + esc(words(x.movement)) + "</li>";
+    }).join("");
+  }
+  function pollAI(){ fetch(B()+"/incidents.json",{cache:"no-store"}).then(function(r){return r.json();}).then(renderAI).catch(function(){}); }
+  pollAI(); setInterval(pollAI, 2000);
+
+  // Phone acceleration (Phyphox) under the live video: the last 10 s, the impact
+  // threshold dashed, detected impacts in red; says "unavailable" when there is no data.
+  function phoneNa(text){ $("pgNa").textContent = text; $("pgNa").style.display = "grid"; $("pgNow").textContent = ""; }
+  function drawPhone(d){
+    if(!d || !d.available){ phoneNa(t("phoneNa") + (d && d.reason ? " · " + d.reason : "")); return; }
+    if(!d.samples.length){ phoneNa(t("phoneNa") + " · " + t("phoneWait")); return; }
+    $("pgNa").style.display = "none";
+    $("pgNow").textContent = (d.accel / 9.81).toFixed(2) + t("gNow");
+    var c = $("pgCanvas"), dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+    if(!w || !h) return;  // dashboard view not visible right now
+    if(c.width !== Math.round(w*dpr) || c.height !== Math.round(h*dpr)){ c.width = Math.round(w*dpr); c.height = Math.round(h*dpr); }
+    var g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+    var L = 34, Bt = h - 16, Tp = 6, ymax = Math.max(1.5 * d.threshold, 1);
+    d.samples.concat(d.impacts).forEach(function(p){ if(p[1] > ymax) ymax = p[1]; });
+    function X(age){ return L + (1 - age / d.seconds) * (w - L); }
+    function Y(a){ return Bt - Math.min(a, ymax) / ymax * (Bt - Tp); }
+    g.font = "11px system-ui, sans-serif"; g.fillStyle = "#6a7b74"; g.strokeStyle = "#dfe5e1"; g.lineWidth = 1;
+    for(var gv = 0; gv <= ymax / 9.81; gv += ymax > 40 ? 2 : 1){
+      var gy = Math.round(Y(gv * 9.81)) + .5;
+      g.beginPath(); g.moveTo(L, gy); g.lineTo(w, gy); g.stroke(); g.fillText(gv + " g", 0, gy + 4);
+    }
+    g.fillText("-" + d.seconds + " s", L, h - 2); g.fillText("now", w - 22, h - 2);
+    g.setLineDash([5, 5]); g.strokeStyle = "#c27c0e"; g.beginPath();
+    g.moveTo(L, Y(d.threshold)); g.lineTo(w, Y(d.threshold)); g.stroke(); g.setLineDash([]);
+    g.strokeStyle = "#20675a"; g.lineWidth = 2; g.lineJoin = "round"; g.beginPath();
+    d.samples.forEach(function(p, i){ var x = X(p[0]), y = Y(p[1]); if(i) g.lineTo(x, y); else g.moveTo(x, y); });
+    g.stroke();
+    g.fillStyle = "#b3261e";
+    d.impacts.forEach(function(p){ g.beginPath(); g.arc(X(p[0]), Y(p[1]), 5, 0, 2*Math.PI); g.fill(); });
+  }
+  var phoneBusy = false;
+  function pollPhone(){
+    if(phoneBusy) return; phoneBusy = true;
+    fetch(B()+"/api/phone",{cache:"no-store"}).then(function(r){return r.json();}).then(drawPhone)
+      .catch(function(){ phoneNa(t("phoneNa") + " · " + t("phoneNoConn")); })
+      .then(function(){ phoneBusy = false; });
+  }
+  pollPhone(); setInterval(pollPhone, 250);
+
   poll(); setInterval(poll, 2000); setInterval(tick, 500);
 })();
 </script>
