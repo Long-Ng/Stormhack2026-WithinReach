@@ -2,6 +2,7 @@
 
     python main.py --inject fall.mp4 --inject-hold 10      # press i in the window to play it
     python main.py --inject a.mp4 --inject b.avi --inject-after 5 --no-display
+    python main.py --inject "D:/footage/CAUCAFall/Subject.1"  # every video in the folder
 
 While a clip plays, its frames replace the camera's and everything downstream
 (detector, alerts, dashboard, clip recording) treats them as live. Frames are paced
@@ -18,6 +19,20 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+
+
+VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
+
+
+def expand_videos(paths: list[str]) -> list[str]:
+    """Files as given; a folder becomes the videos under it, sorted."""
+    out = []
+    for p in map(Path, paths):
+        if p.is_dir():
+            out += sorted(str(f) for f in p.rglob("*") if f.suffix.lower() in VIDEO_EXTS)
+        else:
+            out.append(str(p))
+    return out
 
 
 class Injector:

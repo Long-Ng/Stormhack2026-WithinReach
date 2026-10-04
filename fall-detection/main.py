@@ -32,7 +32,7 @@ from cover import CoverReset
 from detector import FallDetector, State
 from events import ConsoleSink, FallEvent, FileSink, dispatch, save_snapshot
 from features import FeatureExtractor, FeatureLogger
-from inject import Injector
+from inject import Injector, expand_videos
 from imu import open_wearable
 from overlay import draw_overlay, draw_skeleton
 from pose import PoseEstimator
@@ -62,7 +62,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--countdown", type=int, default=120,
                    help="seconds before the phone page says time is up to call (0 = off; it never calls by itself)")
     p.add_argument("--inject", metavar="VIDEO", action="append", default=[],
-                   help="debug: video to splice into the live feed; press i to play (repeat for several)")
+                   help="debug: video (or folder of videos) to splice into the live feed; "
+                        "press i to play the next one (repeat for several)")
     p.add_argument("--inject-hold", type=float, default=5.0, metavar="S",
                    help="keep showing the injected clip's last frame this long (default 5)")
     p.add_argument("--inject-after", type=float, default=None, metavar="S",
@@ -157,8 +158,8 @@ def main() -> int:
         if is_file:
             print("[inject] ignored: only for a live camera (--source is a file)", file=sys.stderr)
         else:
-            injector = Injector(args.inject, args.inject_hold)
-            print(f"[inject] {len(args.inject)} clip(s); press i in the window to play"
+            injector = Injector(expand_videos(args.inject), args.inject_hold)
+            print(f"[inject] {len(injector.paths)} clip(s); press i in the window to play"
                   + (f", first one at {args.inject_after:g} s" if args.inject_after is not None else ""))
     inject_at = args.inject_after
     start_injection = False
@@ -260,8 +261,11 @@ def main() -> int:
                 key = cv2.waitKey(1) & 0xFF
                 if key in (ord("q"), 27):  # q or Esc
                     break
-                if key == ord("i") and injector is not None:
-                    start_injection = True  # next clip from the next frame on
+                if key in (ord("i"), ord("I")):
+                    if injector is not None:
+                        start_injection = True  # next clip from the next frame on
+                    else:
+                        print("[inject] no clips: start with --inject <video or folder>", flush=True)
                 if cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) < 1:
                     break  # window closed with the X button
 
