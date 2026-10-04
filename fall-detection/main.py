@@ -33,6 +33,7 @@ from cover import CoverReset
 from detector import FallDetector, State
 from events import ConsoleSink, FallEvent, FileSink, dispatch, save_snapshot
 from features import FeatureExtractor, FeatureLogger
+from gemini import FallAnalyst, FrameHistory, GeminiClient, report_dict
 from imu import open_wearable
 from overlay import draw_overlay, draw_skeleton
 from pose import PoseEstimator
@@ -156,6 +157,20 @@ def main() -> int:
             print(f"[notify] disabled: {e!r}", file=sys.stderr)
     recorder = ClipRecorder(cfg.events_dir, cfg.clip_pre_s, cfg.clip_tail_s, cfg.clip_max_after_s,
                             cfg.clip_max_width, cfg.clip_max_fps)
+    # Gemini fall analysis; its reports reach the monitor through the phone alerts.
+    history = analyst = None
+    gemini_key = cfg.gemini_api_key or os.environ.get("GEMINI_API_KEY", "")
+    if alerts is not None and gemini_key:
+        history = FrameHistory()
+        analyst = FallAnalyst(
+            GeminiClient(gemini_key, cfg.gemini_model),
+            on_report=lambda inc_id, r, minutes: manager.add_report(
+                inc_id, report_dict(r, minutes, cfg.emergency_number)),
+            is_open=manager.is_open, update_s=cfg.gemini_update_s)
+        print(f"[gemini] fall analysis on ({cfg.gemini_model}), "
+              f"updates every {cfg.gemini_update_s / 60:g} min")
+    elif alerts is not None:
+        print("[gemini] off: set gemini_api_key in params.local.toml to describe falls")
 
     with contextlib.ExitStack() as stack:
         stack.callback(recorder.close)  # finish the clip in progress on exit
@@ -189,6 +204,8 @@ def main() -> int:
                 detector = FallDetector(cfg)
                 print("Reset (camera covered)")
 
+            if history is not None:
+                history.add(frame, ts_ms / 1000.0)  # clean frame, before any overlay
             lms = estimator.process(frame, ts_ms)
             feats = extractor.update(lms, ts_ms / 1000.0)
             phone_still = None
@@ -203,6 +220,12 @@ def main() -> int:
                 if detection.sensor:
                     print("(confirmed with phone sensor)")
                 handle_detection(detection, frame, lms, cfg, sinks, streamer, recorder)
+                if analyst is not None and manager.last_incident_id:
+                    analyst.start(manager.last_incident_id, history, ts_ms / 1000.0)
+            if analyst is not None:
+                if detector.state is State.UPRIGHT:
+                    analyst.stop()  # back up: no more updates
+                analyst.tick(history, ts_ms / 1000.0)
             # Clean frame (no overlay yet); the clip runs until the person is back up.
             recorder.add(frame, ts_ms / 1000.0, detector.state is not State.UPRIGHT)
 

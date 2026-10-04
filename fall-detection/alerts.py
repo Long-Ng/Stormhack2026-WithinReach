@@ -22,7 +22,7 @@ import sys
 import threading
 import time
 import urllib.request
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -57,6 +57,7 @@ class Incident:
     status: str
     snapshot: str | None        # file name inside events_dir
     replied_t: float | None = None
+    reports: list[dict] = field(default_factory=list)  # Gemini analyses, oldest first
 
 
 def lan_url(port: int) -> str:
@@ -108,6 +109,7 @@ class AlertManager:
         self.publish = publish
         self.clock = clock
         self.incidents: dict[str, Incident] = {}
+        self.last_incident_id: str | None = None  # newest incident, for the Gemini analyst
         self.messages: list[dict] = []  # person -> monitor: {"t", "kind", "text", "file"}
         self.voice_dir = Path(cfg.events_dir) / "voice"
         self._lock = threading.Lock()  # replies arrive on the server's threads
@@ -124,7 +126,26 @@ class AlertManager:
             inc = Incident(id=inc_id, t=event.timestamp, kind=event.kind, status=WAITING,
                            snapshot=snap)
             self.incidents[inc.id] = inc
+            self.last_incident_id = inc.id
         self.publish(self._person_message(inc))
+
+    # --- Gemini analysis (gemini.FallAnalyst calls these) -----------------------------
+    def is_open(self, incident_id: str) -> bool:
+        """Still worth analysing: not answered "I'm OK"."""
+        inc = self.incidents.get(incident_id)
+        return inc is not None and inc.status != OK
+
+    def add_report(self, incident_id: str, report: dict) -> None:
+        """Store an analysis (gemini.report_dict). Once the monitor has been alerted,
+        each one is sent to them; before that, the first one goes into their alert."""
+        with self._lock:
+            inc = self.incidents.get(incident_id)
+            if inc is None:
+                return
+            inc.reports.append(report)
+            alerted = inc.status in (HELP, NO_REPLY)
+        if alerted:
+            self.publish(self._monitor_update_message(inc, report))
 
     # --- called by main.py every frame ----------------------------------------------
     def tick(self) -> None:
@@ -300,9 +321,27 @@ class AlertManager:
         if self.cfg.person_number:
             msg["actions"].append({"action": "view", "label": "Call person",
                                    "url": f"tel:{self.cfg.person_number}"})
+        if inc.reports:  # Gemini already looked at the fall
+            msg["message"] += "\n" + self._report_text(inc.reports[-1])
         if inc.snapshot and self.cfg.ntfy_attach_snapshot:
             msg["attach"] = f"{self.base_url}/events/{quote(inc.snapshot)}"
         return msg
+
+    @staticmethod
+    def _report_text(r: dict) -> str:
+        return (f"{r['description']}\nWhat to do: {r['guidance']}\n"
+                "(Automated guidance. If in doubt, call emergency services.)")
+
+    def _monitor_update_message(self, inc: Incident, r: dict) -> dict:
+        when = "Fall details" if r["minutes"] < 1 else f"Update, {r['minutes']:.0f} min after the fall"
+        return {
+            "topic": self.cfg.ntfy_monitor_topic,
+            "title": f"{when} - {self.cfg.room_name}",
+            "message": self._report_text(r),
+            "priority": {"urgent": 5, "high": 4}.get(r["urgency"], 3),
+            "tags": ["rotating_light" if r["urgency"] == "urgent" else "information_source"],
+            "click": self._dashboard_url(inc),
+        }
 
     def _monitor_ok_message(self, inc: Incident) -> dict:
         return {

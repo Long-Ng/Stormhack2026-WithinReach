@@ -92,6 +92,12 @@ class Config:
     room_name: str = "Living room"
     public_url: str = ""  # address phones use to reach this PC; empty = http://<LAN IP>:<port>
 
+    # Gemini fall analysis: frames of a confirmed fall go to Google. Off without a key.
+    gemini_api_key: str = ""  # put in params.local.toml (gitignored) or env GEMINI_API_KEY
+    gemini_model: str = "gemini-3.8-flash"
+    gemini_update_s: float = 300.0  # status update this often while the incident is open
+    emergency_number: str = "911"  # used in the guidance text ("Call 911 now")
+
     # Display
     fps_smoothing: float = 0.9  # EMA factor for the FPS readout
 

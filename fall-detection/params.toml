@@ -93,5 +93,14 @@ reply_timeout_s = 30.0        # person has this long to answer before the monito
 room_name = "Living room"
 public_url = ""               # empty = http://<this PC's Wi-Fi IP>:<port>
 
+[gemini]
+# Gemini describes each confirmed fall (type, position, movement) and the monitor gets
+# fixed guidance for it, then an update every gemini_update_s while the incident is
+# open. Camera frames are sent to Google. Off unless gemini_api_key is set in
+# params.local.toml (or the GEMINI_API_KEY environment variable).
+gemini_model = "gemini-3.8-flash"
+gemini_update_s = 300.0
+emergency_number = "911"     # only used in guidance text; nothing is dialled
+
 [display]
 fps_smoothing = 0.9
