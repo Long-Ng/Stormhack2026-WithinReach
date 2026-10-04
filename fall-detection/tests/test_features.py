@@ -125,3 +125,42 @@ def test_pose_lost_returns_none_and_resets_velocity():
     # No velocity spike from the jump across the gap.
     f = ex.update(standing(50.0), 2 / FPS)
     assert f.hip_vel == 0.0
+
+
+def lying_at(dx=0.0, noise=None):
+    """Lying pose shifted by dx px, optionally with per-point wobble."""
+    lms = lying()
+    lms[:, 0] += dx
+    if noise is not None:
+        lms[:, :2] += noise
+    return lms
+
+
+def test_pose_wobble_on_a_still_person_reads_as_still():
+    # ~1.5 px random wobble per frame at 30 fps: frame-to-frame that is ~0.45 torso/s,
+    # above still_motion; over a 1 s window it cancels out.
+    rng = np.random.default_rng(1)
+    ex = FeatureExtractor(Config(ema_alpha=1.0))
+    motions = []
+    for i in range(90):
+        f = ex.update(lying_at(noise=rng.normal(0, 1.5, (33, 2))), i / FPS)
+        if i >= 30:
+            motions.append(f.motion)
+    assert max(motions) < 0.15
+
+
+def test_steady_movement_reads_its_real_speed():
+    # Sliding 3 px per frame = 90 px/s = 0.9 torso lengths/s (torso 100 px).
+    ex = FeatureExtractor(Config(ema_alpha=1.0))
+    for i in range(60):
+        f = ex.update(lying_at(dx=3.0 * i), i / FPS)
+    assert f.motion == pytest.approx(0.9, rel=0.05)
+
+
+def test_motion_window_resets_when_pose_is_lost():
+    ex = FeatureExtractor(Config(ema_alpha=1.0))
+    for i in range(30):
+        ex.update(lying_at(dx=0.0), i / FPS)
+    ex.update(None, 30 / FPS)
+    f = ex.update(lying_at(dx=200.0), 31 / FPS)  # jump across the gap must not count
+    assert f.motion == 0.0

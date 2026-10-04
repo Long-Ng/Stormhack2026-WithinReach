@@ -19,6 +19,7 @@ frame_height = 480
 
 [features]
 min_visibility = 0.5      # landmark visibility cutoff (0-1)
+motion_window_s = 1.0     # motion = net movement over this window; pose wobble cancels out
 ema_alpha = 0.4           # smoothing for angle / hip_vel / motion; lower = smoother, 1.0 = off
 vel_window_s = 0.5        # window for peak hip velocity
 ref_upright_angle = 20.0  # torso_ref only learns from frames more upright than this

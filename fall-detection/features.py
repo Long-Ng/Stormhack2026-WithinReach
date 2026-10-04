@@ -64,6 +64,11 @@ def _ema(prev: float | None, x: float, alpha: float) -> float:
 
 
 class FeatureExtractor:
+    """Per-frame features. `motion` is net displacement over cfg.motion_window_s, not
+    frame-to-frame speed: pose-model wobble of ~1 px per frame in random directions adds
+    up to a large per-frame speed even on a still image, but cancels out over a second,
+    while real movement accumulates."""
+
     def __init__(self, cfg: Config):
         self.cfg = cfg
         self._ref_samples: deque[float] = deque(maxlen=cfg.torso_ref_frames)
@@ -74,12 +79,31 @@ class FeatureExtractor:
     def _reset_tracking(self) -> None:
         """Forget frame-to-frame state; used when the pose is lost."""
         self._prev_t: float | None = None
-        self._prev_lms: np.ndarray | None = None
-        self._prev_visible: np.ndarray | None = None
         self._prev_hip_y: float | None = None
         self._angle_s: float | None = None
         self._vel_s: float | None = None
         self._motion_s: float | None = None
+        # (t, MOTION_POINTS xy, visible) over the last motion_window_s, for net displacement
+        self._motion_hist: deque[tuple[float, np.ndarray, np.ndarray]] = deque()
+
+    def _net_motion(self, lms: np.ndarray, visible: np.ndarray, t: float,
+                    torso_ref: float) -> float | None:
+        """Mean displacement of MOTION_POINTS since ~motion_window_s ago, torso lengths/s."""
+        pts = lms[list(MOTION_POINTS), :2].copy()
+        vis = visible[list(MOTION_POINTS)].copy()
+        hist = self._motion_hist
+        hist.append((t, pts, vis))
+        # Keep the newest sample that is at least a window old as the reference.
+        while len(hist) > 1 and t - hist[1][0] >= self.cfg.motion_window_s:
+            hist.popleft()
+        t0, pts0, vis0 = hist[0]
+        if t - t0 <= 0:
+            return None
+        common = vis & vis0
+        if not common.any():
+            return None
+        disp = np.linalg.norm(pts[common] - pts0[common], axis=1)
+        return float(disp.mean()) / torso_ref / (t - t0)
 
     def update(self, lms: np.ndarray | None, t: float) -> Features | None:
         """Feed one frame (t in seconds). Returns None when the torso is not visible."""
@@ -110,14 +134,10 @@ class FeatureExtractor:
         hip_y = float(hip_mid[1])
 
         vel_raw = 0.0
-        motion_raw = None
         if dt > 0:
             vel_raw = (hip_y - self._prev_hip_y) / dt / torso_ref
-            common = [i for i in MOTION_POINTS if visible[i] and self._prev_visible[i]]
-            if common:
-                disp = np.linalg.norm(lms[common, :2] - self._prev_lms[common, :2], axis=1)
-                motion_raw = float(disp.mean()) / torso_ref / dt
             self._vel_samples.append((t, vel_raw))
+        motion_raw = self._net_motion(lms, visible, t, torso_ref)
         while self._vel_samples and t - self._vel_samples[0][0] > cfg.vel_window_s:
             self._vel_samples.popleft()
         vel_peak = max((v for _, v in self._vel_samples), default=0.0)
@@ -140,8 +160,6 @@ class FeatureExtractor:
             hip_height = (float(ankle_mid[1]) - hip_y) / torso_ref
 
         self._prev_t = t
-        self._prev_lms = lms.copy()
-        self._prev_visible = visible
         self._prev_hip_y = hip_y
 
         return Features(

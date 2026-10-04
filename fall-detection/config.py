@@ -35,6 +35,7 @@ class Config:
 
     # Features
     min_visibility: float = 0.5  # landmark visibility cutoff
+    motion_window_s: float = 1.0  # motion = net body displacement over this window (cancels pose wobble)
     ema_alpha: float = 0.4  # smoothing for torso_angle, hip_vel, motion (1.0 = no smoothing)
     vel_window_s: float = 0.5  # window for peak hip velocity
     ref_upright_angle: float = 20.0  # torso_ref only learns from frames more upright than this
