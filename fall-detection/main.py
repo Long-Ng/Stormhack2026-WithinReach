@@ -183,26 +183,42 @@ def main() -> int:
     # Gemini fall analysis; its reports reach the monitor through the phone alerts.
     history = analyst = None
     gemini_key = cfg.gemini_api_key or os.environ.get("GEMINI_API_KEY", "")
-    if alerts is not None and gemini_key:
+    if alerts is not None and (gemini_key or cfg.gemini_fake):
         history = FrameHistory()
+        if cfg.gemini_fake:
+            from fake_gemini import FakeGeminiClient
+            first_client = update_client = FakeGeminiClient()
+        else:
+            first_client = GeminiClient(gemini_key, cfg.gemini_model,
+                                        fallback_models=(cfg.gemini_fallback_model,),
+                                        video_fps=cfg.gemini_video_fps)
+            update_client = GeminiClient(gemini_key, cfg.gemini_update_model)
         analyst = FallAnalyst(
-            GeminiClient(gemini_key, cfg.gemini_model, fallback_models=(cfg.gemini_fallback_model,),
-                         video_fps=cfg.gemini_video_fps),
-            update_client=GeminiClient(gemini_key, cfg.gemini_update_model),
+            first_client,
+            update_client=update_client,
             on_report=lambda inc_id, r, minutes, still: manager.add_report(
                 inc_id, report_dict(r, minutes, cfg.emergency_number, still)),
             is_open=manager.is_open, update_s=cfg.gemini_update_s,
             max_updates=int(cfg.gemini_max_minutes * 60 / cfg.gemini_update_s))
-        print(f"[gemini] fall analysis on ({cfg.gemini_model}; checks on {cfg.gemini_update_model}), "
+        model = "preloaded demo answers, no API calls" if cfg.gemini_fake else             f"{cfg.gemini_model}; checks on {cfg.gemini_update_model}"
+        print(f"[gemini] fall analysis on ({model}), "
               f"checks every {cfg.gemini_update_s:g} s for {cfg.gemini_max_minutes:g} min")
     elif alerts is not None:
         print("[gemini] off: set gemini_api_key in params.local.toml to describe falls")
+    if analyst is not None and streamer is not None:
+        def demo_speed(q):  # dashboard Fast Forward button: POST ?fast=1|0, GET reads it
+            if "fast" in q:
+                speed = cfg.demo_fast_speed if q["fast"] == "1" else 1.0
+                analyst.speed = manager.notify_speed = speed
+                print(f"[gemini] {'fast-forward on' if speed > 1 else 'normal speed'}", flush=True)
+            return 200, "application/json", json.dumps({"fast": analyst.speed > 1}).encode()
+        streamer.add_route("/api/demo/speed", demo_speed)
 
     # Rest zones (bed, sofa): lying there is not a fall. Gemini finds them when it can.
     zone_store = watcher = scanner = None
     if cfg.rest_zones:
         zone_store = ZoneStore(cfg.zones_file)
-        if gemini_key:
+        if gemini_key and not cfg.gemini_fake:
             watcher = SceneWatcher(cfg.scene_empty_s, cfg.scene_change_frac, cfg.scene_change_s,
                                    cfg.scene_min_interval_s, have_zones=bool(zone_store.zones))
             scanner = SceneScanner(

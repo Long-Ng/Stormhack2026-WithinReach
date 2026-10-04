@@ -112,6 +112,7 @@ class AlertManager:
         self.clock = clock
         self.incidents: dict[str, Incident] = {}
         self.last_incident_id: str | None = None  # newest incident, for the Gemini analyst
+        self.notify_speed = 1.0  # demo fast-forward: the 5-min notification spacing shrinks too
         self.messages: list[dict] = []  # person -> monitor: {"t", "kind", "text", "file"}
         self.voice_dir = Path(cfg.events_dir) / "voice"
         self._lock = threading.Lock()  # replies arrive on the server's threads
@@ -163,7 +164,7 @@ class AlertManager:
             became_urgent = (self.cfg.gemini_notify_urgent_now and report["urgency"] == "urgent"
                              and (last is None or last["urgency"] != "urgent"))
             if last is not None and not became_urgent and \
-                    report["t"] - last["t"] < self.cfg.gemini_notify_s:
+                    report["t"] - last["t"] < self.cfg.gemini_notify_s / self.notify_speed:
                 return
             inc.sent_report = report
         self.publish(self._monitor_update_message(inc, report))

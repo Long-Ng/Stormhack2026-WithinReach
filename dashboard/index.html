@@ -68,6 +68,16 @@ main{flex:1;padding:26px 28px;max-width:1260px}
 .notice h4{margin:6px 0 10px;font-size:21px;line-height:1.25}
 .notice p{margin:0;color:#4a3d1c;font-size:15px;line-height:1.45}
 .notice a{margin-top:auto;font-weight:700;color:#7a4c00;cursor:pointer;text-decoration:none}
+.ai{margin:14px 0 4px;padding:12px 14px;background:#fff;border:1px solid var(--amberln);border-radius:14px}
+.ai-head{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:6px}
+.ai-tag{border-radius:999px;padding:2px 9px;font-weight:800;font-size:11px;letter-spacing:.04em;color:#fff;background:var(--muted)}
+.ai-tag.urgent{background:var(--red)}.ai-tag.high{background:#c2410c}.ai-tag.medium{background:var(--amber)}.ai-tag.low{background:var(--green)}
+.ai p{margin:0 0 6px;color:var(--ink);font-size:14px}
+.ai .ai-do{font-weight:600}
+.ai ol{margin:6px 0 0;padding-left:18px;color:var(--muted);font-size:12px}
+.ai small{display:block;color:var(--muted);font-size:11px;margin-top:6px}
+.ff{align-self:flex-start;margin:10px 0 12px;border:1px solid var(--amberln);background:#fff;color:#7a4c00;border-radius:10px;padding:6px 12px;font-weight:700;font-size:13px;cursor:pointer}
+.ff.on{background:#7a4c00;color:#fff;border-color:#7a4c00}
 .shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}
 .shot{background:#f3f4f1;border-radius:14px;overflow:hidden;font-size:13px}
 .shot img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}
@@ -135,6 +145,14 @@ td img{width:90px;border-radius:8px;display:block}
         <div class="k">What we noticed so far</div>
         <h4 id="nTitle">No fall detected</h4>
         <p id="nBody">The camera is watching. You will be alerted here if a fall is detected.</p>
+        <div class="ai" id="aiBox" style="display:none">
+          <div class="ai-head"><span class="ai-tag" id="aiUrg"></span><span id="aiWhen"></span></div>
+          <p id="aiDesc"></p>
+          <p class="ai-do">What to do: <span id="aiDo"></span></p>
+          <ol id="aiHist"></ol>
+          <small>Gemini analysis &middot; automated guidance. If in doubt, call 911.</small>
+        </div>
+        <button class="ff" id="ffBtn" style="display:none">&#9193; Fast Forward (For Demo)</button>
         <a data-v="inc" id="nLink">See the fall analysis &rarr;</a>
       </div>
     </div>
@@ -273,7 +291,40 @@ td img{width:90px;border-radius:8px;display:block}
 
   function poll(){
     fetch("/events.json",{cache:"no-store"}).then(function(r){return r.json();}).then(render).catch(function(){});
+    fetch("/incidents.json",{cache:"no-store"}).then(function(r){return r.json();}).then(renderAI).catch(function(){});
   }
+
+  // Gemini analysis of the newest incident, in the "What we noticed so far" box.
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+  function words(s){ return String(s||"").replace(/_/g," "); }
+  function renderAI(j){
+    var inc = (j.incidents || []).slice(-1)[0], reps = inc ? (inc.reports || []) : [];
+    var r = reps[reps.length-1];
+    $("aiBox").style.display = r ? "block" : "none";
+    if(!r) return;
+    $("aiUrg").textContent = r.urgency.toUpperCase();
+    $("aiUrg").className = "ai-tag " + r.urgency;
+    $("aiWhen").textContent = (r.minutes < 0.5 ? "When the fall was confirmed" : Math.round(r.minutes) + " min after the fall")
+      + " \u00B7 " + words(r.position) + ", " + words(r.movement);
+    $("aiDesc").textContent = r.description;
+    $("aiDo").textContent = r.guidance;
+    $("aiHist").innerHTML = reps.slice(-5, -1).reverse().map(function(x){
+      return "<li>" + Math.round(x.minutes) + " min: " + esc(words(x.position)) + ", " + esc(words(x.movement)) + "</li>";
+    }).join("");
+  }
+
+  // Demo: Fast Forward makes the per-minute Gemini checks come every 2 s.
+  function showFast(fast){
+    $("ffBtn").style.display = "inline-block";
+    $("ffBtn").classList.toggle("on", fast);
+    $("ffBtn").innerHTML = fast ? "&#9208; Normal speed" : "&#9193; Fast Forward (For Demo)";
+  }
+  fetch("/api/demo/speed",{cache:"no-store"}).then(function(r){return r.json();}).then(function(d){ showFast(d.fast); }).catch(function(){});
+  $("ffBtn").onclick = function(){
+    var fast = !$("ffBtn").classList.contains("on");
+    fetch("/api/demo/speed?fast=" + (fast ? 1 : 0), {method:"POST"})
+      .then(function(r){return r.json();}).then(function(d){ showFast(d.fast); }).catch(function(){});
+  };
 
   setInterval(function(){
     $("clock").textContent = new Date().toLocaleTimeString([], {hour:"numeric", minute:"2-digit", second:"2-digit"});

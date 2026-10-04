@@ -408,8 +408,11 @@ def encode_mp4(frames: list[tuple[float, bytes]]) -> tuple[bytes, float]:
 @dataclass
 class _Watch:
     fall_t: float      # stream time of the confirmation
-    next_t: float
+    check_t: float     # stream time of the last check (or the confirmation)
     updates: int = 0
+    minutes: float = 0.0  # time since the fall as reported, sped up by fast-forward
+    last_t: float = 0.0
+    checked_min: float = 0.0  # `minutes` at the last check (0 = the first look)
 
 
 class FallAnalyst:
@@ -429,6 +432,9 @@ class FallAnalyst:
         # The per-minute checks go to a model with a bigger daily allowance.
         self.update_client = update_client or client
         self.update_s, self.max_updates = update_s, max_updates
+        # Demo fast-forward: 30 = a check every 2 s, each counting as a minute. Set from
+        # the dashboard's server thread, read here on the camera loop.
+        self.speed = 1.0
         self.watches: dict[str, _Watch] = {}
         self._still_since: dict[str, float] = {}  # worker thread: minute they were first seen still
         self._q: queue.Queue = queue.Queue()
@@ -439,17 +445,20 @@ class FallAnalyst:
         clip = history.span(VIDEO_S)
         if clip:
             self._q.put((incident_id, clip, history.recent(n=8, span_s=10.0, ref_t=t), None))
-        self.watches[incident_id] = _Watch(fall_t=t, next_t=t + self.update_s)
+        self.watches[incident_id] = _Watch(fall_t=t, check_t=t, last_t=t)
 
     def tick(self, history: FrameHistory, t: float) -> None:
+        interval = self.update_s / self.speed
         for inc_id, w in list(self.watches.items()):
+            w.minutes += (t - w.last_t) * self.speed / 60.0
+            w.last_t = t
             if not self.is_open(inc_id) or w.updates >= self.max_updates:
                 del self.watches[inc_id]
-            elif t >= w.next_t:
+            elif t - w.check_t >= interval - 1e-6 and round(w.minutes) > round(w.checked_min):
+                # Timed at the current speed, so a switch acts at once; never twice a minute.
                 w.updates += 1
-                w.next_t = t + self.update_s
-                minutes = (t - w.fall_t) / 60.0
-                self._q.put((inc_id, None, history.recent(n=4, span_s=4.0, ref_t=t), minutes))
+                w.check_t, w.checked_min = t, w.minutes
+                self._q.put((inc_id, None, history.recent(n=4, span_s=4.0, ref_t=t), w.minutes))
 
     def stop(self) -> None:
         """Person is back up: no more updates."""
