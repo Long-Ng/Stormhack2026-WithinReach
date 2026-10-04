@@ -1150,7 +1150,12 @@ fdDetect();
   // the page is opened with #fall (the link to put in A's notification) or the Settings checkbox is on.
   var A_SECONDS = 120;
   var isA = ld("fd.isA", false);
-  if(location.hash === "#fall"){ isA = true; sv("fd.isA", true); }
+  // Open the dashboard with #fall on the person's own phone, #monitor on a family member's.
+  function roleFromHash(){
+    if(location.hash === "#fall"){ isA = true; sv("fd.isA", true); }            // the person who may fall
+    else if(location.hash === "#monitor"){ isA = false; sv("fd.isA", false); }  // a family member watching
+  }
+  roleFromHash(); window.addEventListener("hashchange", roleFromHash);
   var A = {ev:null, stage:null, closed:null, lastLeft:null, audio:null, sr:null};
   function aListen(on){
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1324,7 +1329,7 @@ fdDetect();
   // "I'm OK" and "Call 911". Once per fall, so coming back here does not bounce straight back.
   var fallenSeen = ld("fd.fallen.seen", {});
   function goFallen(key, qs){
-    if(fallenSeen[key]) return;
+    if(!isA || fallenSeen[key]) return;  // only the person's own device; the monitor stays on the dashboard
     fallenSeen[key] = Date.now(); sv("fd.fallen.seen", fallenSeen);
     location.href = B() + "/fallen?" + qs;
   }
