@@ -27,7 +27,7 @@ import cv2
 from config import Config
 from detector import FallDetector
 from features import FeatureExtractor
-from gemini import FrameHistory, GeminiClient, guidance
+from gemini import VIDEO_S, FrameHistory, GeminiClient, first_look, guidance
 from pose import PoseEstimator
 
 
@@ -65,6 +65,7 @@ def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("root"), p.add_argument("pattern"), p.add_argument("out")
     p.add_argument("--hold", type=float, default=5.0)
+    p.add_argument("--images-only", action="store_true", help="skip the video (old behaviour)")
     p.add_argument("--limit", type=int, default=0, help="only the first N videos (0 = all)")
     args = p.parse_args()
     cfg = Config.load()
@@ -81,16 +82,21 @@ def main() -> int:
         rel = Path(v).relative_to(args.root).as_posix()
         truth = is_fall_video(rel)
         for t, hist in replay(v, cfg, args.hold):
+            # Same as the live analyst: video first, 8 stills if that fails.
+            r, mode = None, "images"
+            if not args.images_only:
+                r, mode = first_look(client, hist.span(VIDEO_S)), "video"
             try:
-                r = client.analyze(hist.recent(n=8, span_s=10.0, ref_t=t))
+                if r is None:
+                    r, mode = client.analyze(hist.recent(n=8, span_s=10.0, ref_t=t)), "images"
             except Exception as e:
                 print(f"{rel}: gemini failed: {e!r}", file=sys.stderr)
                 continue
             level, text = guidance(r, 0.0, cfg.emergency_number)
-            row = {"video": rel, "truth_fall": truth, "t": round(t, 2), **vars(r),
+            row = {"video": rel, "truth_fall": truth, "t": round(t, 2), "mode": mode, **vars(r),
                    "urgency": level, "guidance": text}
             rows.append(row)
-            print(f"{rel}  truth={'FALL' if truth else 'adl '}  gemini_is_fall={r.is_fall}  "
+            print(f"{rel}  truth={'FALL' if truth else 'adl '}  gemini_is_fall={r.is_fall}  [{mode}]  "
                   f"{r.fall_type}/{r.position}/{r.movement}  {level}", flush=True)
     Path(args.out).write_text(json.dumps(rows, indent=1))
 
@@ -98,7 +104,7 @@ def main() -> int:
     fn = sum(r["truth_fall"] and not r["is_fall"] for r in rows)
     fp = sum(not r["truth_fall"] and r["is_fall"] for r in rows)
     tn = sum(not r["truth_fall"] and not r["is_fall"] for r in rows)
-    print(f"\n{len(rows)} detections sent to Gemini")
+    print(f"\n{len(rows)} detections sent to Gemini", dict(Counter(r["mode"] for r in rows)))
     print(f"  real falls:   {tp} confirmed, {fn} wrongly called 'not a fall'")
     print(f"  false alarms: {tn} rejected by Gemini, {fp} still called a fall")
     print("  fall types on real falls:",

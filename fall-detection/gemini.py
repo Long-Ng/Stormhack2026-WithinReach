@@ -1,7 +1,11 @@
 """Gemini looks at a detected fall: what kind of fall, and how the person is doing.
 
-    fall confirmed --> frames from just before and after --> Gemini --> FallReport
+    fall confirmed --> 6 s video up to the confirmation --> Gemini --> FallReport
+                       (8 still images instead if the video request fails)
     every gemini_update_s while the incident is open --> latest frames --> FallReport
+
+Video shows how fast the person went down, which is most of the difference between
+a fall and lying down on purpose; the updates only need the current state.
 
 Gemini only *describes* what it sees, as fixed categories (see SCHEMA). What the
 monitor is told to do comes from `guidance()`, a table written here, so a model
@@ -15,8 +19,10 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import queue
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
@@ -28,9 +34,12 @@ from typing import Callable
 import cv2
 import numpy as np
 
+from clips import estimate_fps, open_writer
+
 API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 FRAME_WIDTH = 512  # images are shrunk to this before upload
 JPEG_QUALITY = 80
+VIDEO_S = 6.0  # first look: this much video, ending at the confirmation
 
 FALL_TYPES = ["backward", "forward", "sideways", "slid_from_furniture", "collapse",
               "not_a_fall", "unclear"]
@@ -58,6 +67,12 @@ SCHEMA = {
 PROMPT_FALL = """You are checking a home camera that detected a possible fall of an older adult.
 The images are in time order, with seconds relative to the moment the system confirmed
 the fall (negative = before). Classify what happened, using only what is visible."""
+
+PROMPT_FALL_VIDEO = """You are checking a home camera that detected a possible fall of an older adult.
+The video is the {seconds:.0f} seconds up to the moment the system confirmed the fall.
+Pay attention to how fast the person went down: a fall is sudden and uncontrolled,
+lying down on purpose is slow and supported. Classify what happened, using only what
+is visible."""
 
 PROMPT_UPDATE = """You are checking on an older adult who fell {minutes} minutes ago in front of a
 home camera. The images are the last few seconds, in time order. Classify how they are
@@ -178,7 +193,23 @@ class GeminiClient:
         """minutes_since_fall None: the first look at a new fall; else a status update."""
         prompt = (PROMPT_FALL if minutes_since_fall is None
                   else PROMPT_UPDATE.format(minutes=round(minutes_since_fall)))
-        data = json.dumps(self.request_body(prompt, frames)).encode()
+        return self._generate(self.request_body(prompt, frames))
+
+    def analyze_video(self, mp4: bytes, fps: float, seconds: float) -> FallReport:
+        """First look at a new fall from a short clip."""
+        return self._generate(self.video_request_body(mp4, fps, seconds))
+
+    def video_request_body(self, mp4: bytes, fps: float, seconds: float) -> dict:
+        video = {"inline_data": {"mime_type": "video/mp4", "data": base64.b64encode(mp4).decode()},
+                 "video_metadata": {"fps": round(fps, 2)}}  # default sampling is only 1 fps
+        return {
+            "contents": [{"parts": [{"text": PROMPT_FALL_VIDEO.format(seconds=seconds)}, video]}],
+            "generationConfig": {"response_mime_type": "application/json",
+                                 "response_schema": SCHEMA, "temperature": 0.0},
+        }
+
+    def _generate(self, body: dict) -> FallReport:
+        data = json.dumps(body).encode()
         last: Exception | None = None
         # Gemini often answers 503 "high demand": retry, then try the fallback model.
         for model in self.models:
@@ -208,32 +239,63 @@ class GeminiClient:
 
 # --- frames to send --------------------------------------------------------------------
 class FrameHistory:
-    """The last `keep_s` seconds of frames, one every `every_s`, for the analysis."""
+    """The last `keep_s` seconds at up to 1/every_s fps, kept as JPEGs (~3 MB for 12 s),
+    for both the video and the still images."""
 
-    def __init__(self, keep_s: float = 12.0, every_s: float = 0.5):
+    def __init__(self, keep_s: float = 12.0, every_s: float = 0.1):
         self.keep_s, self.every_s = keep_s, every_s
-        self._frames: deque[tuple[float, np.ndarray]] = deque()
+        self._frames: deque[tuple[float, bytes]] = deque()
 
     def add(self, frame: np.ndarray, t: float) -> None:
-        if self._frames and t - self._frames[-1][0] < self.every_s:
+        if self._frames and t - self._frames[-1][0] < self.every_s * 0.9:  # 0.9: frame jitter
             return
         h, w = frame.shape[:2]
         small = frame if w <= FRAME_WIDTH else cv2.resize(
-            frame, (FRAME_WIDTH, round(h * FRAME_WIDTH / w)), interpolation=cv2.INTER_AREA)
-        self._frames.append((t, small.copy()))
+            frame, (FRAME_WIDTH, round(h * FRAME_WIDTH / w / 2) * 2), interpolation=cv2.INTER_AREA)
+        ok, jpg = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        if not ok:
+            return
+        self._frames.append((t, jpg.tobytes()))
         while self._frames and t - self._frames[0][0] > self.keep_s:
             self._frames.popleft()
 
-    def recent(self, n: int, span_s: float, ref_t: float) -> list[tuple[float, np.ndarray]]:
-        """Up to n frames evenly spread over the last span_s, timed relative to ref_t."""
+    def span(self, span_s: float) -> list[tuple[float, bytes]]:
+        """JPEGs from the last span_s, oldest first (decoded later, off the camera loop)."""
         if not self._frames:
             return []
         end = self._frames[-1][0]
-        pool = [(t, f) for t, f in self._frames if t >= end - span_s]
+        return [(t, j) for t, j in self._frames if t >= end - span_s]
+
+    def recent(self, n: int, span_s: float, ref_t: float) -> list[tuple[float, np.ndarray]]:
+        """Up to n frames evenly spread over the last span_s, timed relative to ref_t."""
+        pool = self.span(span_s)
         if len(pool) > n:
             idx = np.linspace(0, len(pool) - 1, n).round().astype(int)
             pool = [pool[i] for i in idx]
-        return [(t - ref_t, f) for t, f in pool]
+        return [(t - ref_t, _decode(j)) for t, j in pool]
+
+
+def _decode(jpg: bytes) -> np.ndarray:
+    return cv2.imdecode(np.frombuffer(jpg, np.uint8), cv2.IMREAD_COLOR)
+
+
+def encode_mp4(frames: list[tuple[float, bytes]]) -> tuple[bytes, float]:
+    """(t, jpeg) frames -> (mp4 bytes, fps). H.264 on Windows, like the event clips."""
+    fps = estimate_fps([t for t, _ in frames], default=10.0)
+    first = _decode(frames[0][1])
+    size = (first.shape[1], first.shape[0])
+    fd, path = tempfile.mkstemp(suffix=".mp4")
+    os.close(fd)
+    try:
+        w = open_writer(path, fps, size)
+        for _, j in frames:
+            f = _decode(j)
+            w.write(f if (f.shape[1], f.shape[0]) == size else cv2.resize(f, size))
+        w.release()
+        with open(path, "rb") as fh:
+            return fh.read(), fps
+    finally:
+        os.remove(path)
 
 
 # --- schedule: first look, then every update_s while the incident is open --------------
@@ -262,10 +324,10 @@ class FallAnalyst:
         threading.Thread(target=self._run, name="gemini", daemon=True).start()
 
     def start(self, incident_id: str, history: FrameHistory, t: float) -> None:
-        # Fall confirmation comes >= confirm_s after the descent: 10 s back covers it.
-        frames = history.recent(n=8, span_s=10.0, ref_t=t)
-        if frames:
-            self._q.put((incident_id, frames, None))
+        # Video of the last VIDEO_S, with 8 stills over 10 s as the fallback.
+        clip = history.span(VIDEO_S)
+        if clip:
+            self._q.put((incident_id, clip, history.recent(n=8, span_s=10.0, ref_t=t), None))
         self.watches[incident_id] = _Watch(fall_t=t, next_t=t + self.update_s)
 
     def tick(self, history: FrameHistory, t: float) -> None:
@@ -276,7 +338,7 @@ class FallAnalyst:
                 w.updates += 1
                 w.next_t = t + self.update_s
                 minutes = (t - w.fall_t) / 60.0
-                self._q.put((inc_id, history.recent(n=4, span_s=4.0, ref_t=t), minutes))
+                self._q.put((inc_id, None, history.recent(n=4, span_s=4.0, ref_t=t), minutes))
 
     def stop(self) -> None:
         """Person is back up: no more updates."""
@@ -284,9 +346,11 @@ class FallAnalyst:
 
     def _run(self) -> None:
         while True:
-            inc_id, frames, minutes = self._q.get()
+            inc_id, clip, frames, minutes = self._q.get()
+            report = first_look(self.client, clip) if clip else None
             try:
-                report = self.client.analyze(frames, minutes)
+                if report is None:
+                    report = self.client.analyze(frames, minutes)
             except Exception as e:  # network, quota, bad reply: never stop the detector
                 print(f"[gemini] analysis failed: {e!r}", file=sys.stderr, flush=True)
                 continue
@@ -294,6 +358,16 @@ class FallAnalyst:
                 self.on_report(inc_id, report, 0.0 if minutes is None else minutes)
             except Exception as e:
                 print(f"[gemini] report handler failed: {e!r}", file=sys.stderr, flush=True)
+
+
+def first_look(client: GeminiClient, clip: list[tuple[float, bytes]]) -> FallReport | None:
+    """Video analysis of a new fall, or None (the caller then sends still images)."""
+    try:
+        mp4, fps = encode_mp4(clip)
+        return client.analyze_video(mp4, fps, clip[-1][0] - clip[0][0])
+    except Exception as e:
+        print(f"[gemini] video failed, using still images: {e!r}", file=sys.stderr, flush=True)
+        return None
 
 
 def report_dict(r: FallReport, minutes: float, emergency: str = "911") -> dict:

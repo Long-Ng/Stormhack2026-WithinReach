@@ -172,3 +172,67 @@ def test_bad_key_is_not_retried(monkeypatch):
     with pytest.raises(urllib.error.HTTPError):
         c.analyze([])
     assert calls == ["main"]
+
+
+# --- video first look, images as fallback ----------------------------------------------
+def history_10fps(seconds=12.0):
+    h = FrameHistory()
+    for i in range(int(seconds * 10)):
+        h.add(np.full((360, 640, 3), (i * 3) % 256, np.uint8), 100 + i / 10)
+    return h
+
+
+def test_clip_encodes_to_a_playable_mp4(tmp_path):
+    import cv2
+    from gemini import VIDEO_S, encode_mp4
+    clip = history_10fps().span(VIDEO_S)
+    mp4, fps = encode_mp4(clip)
+    assert 9.5 <= fps <= 10.5 and len(clip) in (60, 61)
+    (tmp_path / "c.mp4").write_bytes(mp4)
+    cap = cv2.VideoCapture(str(tmp_path / "c.mp4"))
+    assert cap.get(cv2.CAP_PROP_FRAME_WIDTH) == 512 and cap.read()[0]
+
+
+def test_video_request_has_the_clip_and_its_frame_rate():
+    body = GeminiClient("k", "m").video_request_body(b"mp4bytes", 10.0, 6.0)
+    text, video = body["contents"][0]["parts"]
+    assert "6 seconds" in text["text"]
+    assert video["inline_data"]["mime_type"] == "video/mp4"
+    assert video["video_metadata"] == {"fps": 10.0}
+
+
+class VideoClient:
+    def __init__(self, video_fails):
+        self.video_fails, self.used = video_fails, []
+        self.done = threading.Semaphore(0)
+
+    def analyze_video(self, mp4, fps, seconds):
+        self.used.append("video")
+        if self.video_fails:
+            raise TimeoutError("video too slow")
+        return report(fall_type="forward")
+
+    def analyze(self, frames, minutes=None):
+        self.used.append(f"images:{len(frames)}")
+        return report(fall_type="sideways")
+
+
+def first_report(video_fails):
+    client, got = VideoClient(video_fails), []
+
+    def on_report(inc_id, r, minutes):
+        got.append(r)
+        client.done.release()
+    FallAnalyst(client, on_report).start("inc1", history_10fps(), 111.9)
+    assert client.done.acquire(timeout=10)
+    return client.used, got[0]
+
+
+def test_first_look_uses_video():
+    used, r = first_report(video_fails=False)
+    assert used == ["video"] and r.fall_type == "forward"
+
+
+def test_first_look_falls_back_to_eight_images():
+    used, r = first_report(video_fails=True)
+    assert used == ["video", "images:8"] and r.fall_type == "sideways"
