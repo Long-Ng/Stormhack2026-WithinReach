@@ -38,7 +38,7 @@ from gemini import FallAnalyst, FrameHistory, GeminiClient, report_dict
 from zones import SceneScanner, SceneWatcher, ZoneStore, draw_zones
 from imu import open_wearable
 from inject import KEYS as INJECT_KEYS, ClipInjector
-from overlay import draw_overlay, draw_skeleton, draw_text, render_privacy_frame
+from overlay import draw_overlay, draw_phone_graph, draw_skeleton, draw_text, render_privacy_frame
 from pose import PoseEstimator
 from smoothing import SkeletonStabilizer
 
@@ -200,6 +200,8 @@ def main() -> int:
                 inc_id, report_dict(r, minutes, cfg.emergency_number, still)),
             is_open=manager.is_open, update_s=cfg.gemini_update_s,
             max_updates=int(cfg.gemini_max_minutes * 60 / cfg.gemini_update_s))
+        if streamer is not None and not cfg.gemini_fake:
+            streamer.set_config(gemini_falls=True)  # real Gemini sees fall clips: word Privacy view honestly
         model = "preloaded demo answers, no API calls" if cfg.gemini_fake else             f"{cfg.gemini_model}; checks on {cfg.gemini_update_model}"
         print(f"[gemini] fall analysis on ({model}), "
               f"checks every {cfg.gemini_update_s:g} s for {cfg.gemini_max_minutes:g} min")
@@ -224,6 +226,8 @@ def main() -> int:
             scanner = SceneScanner(
                 GeminiClient(gemini_key, cfg.gemini_update_model).analyze_scene,
                 zone_store, watcher)
+            if streamer is not None:
+                streamer.set_config(gemini_scan=True)  # empty-room pictures go to Gemini
         names = ", ".join(z.label for z in zone_store.zones) or "none yet"
         print(f"[zones] rest zones: {names}"
               + ("; Gemini rescans when the empty room changes" if scanner else
@@ -231,6 +235,12 @@ def main() -> int:
         if streamer is not None:
             streamer.add_route("/zones.json", lambda q: (
                 200, "application/json", json.dumps(zone_store.as_json()).encode()))
+
+    if not args.no_display:
+        # Resizable, so it can be enlarged for a demo screen; F toggles fullscreen.
+        cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(WINDOW, 960, 720)
+    fullscreen = False
 
     with contextlib.ExitStack() as stack:
         stack.callback(recorder.close)  # finish the clip in progress on exit
@@ -285,7 +295,14 @@ def main() -> int:
             view = render_privacy_frame(frame.shape, shown_lms, cfg.min_visibility) if private else frame
             if streamer is not None:  # clean frame, before the debug overlay is drawn
                 try:
-                    streamer.update(view)
+                    live = view
+                    if streamer.demo["graph"] or streamer.demo["skeleton"]:
+                        live = view.copy()  # demo overlays: live feed only, not snapshots or clips
+                        if streamer.demo["skeleton"] and not private and shown_lms is not None:
+                            draw_skeleton(live, shown_lms, cfg.min_visibility)
+                        if streamer.demo["graph"]:
+                            draw_phone_graph(live, wearable)
+                    streamer.update(live)
                 except Exception as e:
                     print(f"[dashboard] update failed: {e!r}", file=sys.stderr)
             feats = extractor.update(lms, ts_ms / 1000.0)
@@ -348,6 +365,10 @@ def main() -> int:
                 key = cv2.waitKey(1) & 0xFF
                 if key in (ord("q"), 27):  # q or Esc
                     break
+                if key in (ord("f"), ord("F")):
+                    fullscreen = not fullscreen
+                    cv2.setWindowProperty(WINDOW, cv2.WND_PROP_FULLSCREEN,
+                                          cv2.WINDOW_FULLSCREEN if fullscreen else cv2.WINDOW_NORMAL)
                 if key in INJECT_KEYS:
                     if injector is None:
                         print("[inject] start main.py with --inject <video or folder> to use I / Space")

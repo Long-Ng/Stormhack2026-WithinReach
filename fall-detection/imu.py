@@ -57,6 +57,7 @@ class Wearable:
         self.impacts = ImpactDetector(cfg)
         self.accel = 0.0                      # latest value, m/s^2 from rest
         self.last_impact: Impact | None = None
+        self.impact_log: deque[Impact] = deque(maxlen=20)  # recent impacts, for the graph
         self._still_since: float | None = None
         self._last_t = time.perf_counter()
 
@@ -79,6 +80,7 @@ class Wearable:
             if hit is not None:
                 hits.append(hit)
                 self.last_impact = hit
+                self.impact_log.append(hit)
         if new:
             self._last_t = new[-1][0]
         return hits
