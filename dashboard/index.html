@@ -48,7 +48,6 @@ main{flex:1;padding:26px 28px;max-width:1260px}
 .chip{position:absolute;top:14px;background:rgba(0,0,0,.65);color:#fff;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:700}
 .chip.live{left:14px}.chip.live i{display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff4d3d;margin-right:6px}
 .chip.time{right:14px}
-.chip.tag{left:50%;bottom:14px;transform:translateX(-50%);background:#f2b53a;color:#3b2a00;display:none}
 .vmsg{position:absolute;color:#aab7b2;font-size:15px;text-align:center;padding:20px}
 .btn{width:100%;border-radius:12px;padding:15px;font-size:19px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:10px;border:2px solid #cfd5d1;background:#fff;color:var(--ink);margin-bottom:12px;text-decoration:none}
 .btn.talk.on{background:var(--greenbg);border-color:var(--green)}
@@ -130,7 +129,6 @@ td img{width:90px;border-radius:8px;display:block}
         <span class="chip live"><i></i>LIVE</span><span class="chip time" id="clock">--:--:--</span>
         <img id="cam" alt="Live camera">
         <div class="vmsg" id="vmsg">Waiting for video from main.py...</div>
-        <span class="chip tag" id="vtag"></span>
       </div>
       <div class="card pgraph">
         <div class="head"><h3>Phone motion (Phyphox)</h3><span class="now" id="pgNow"></span></div>
@@ -259,8 +257,6 @@ td img{width:90px;border-radius:8px;display:block}
     var banner = $("banner");
     banner.classList.toggle("ok", !on);
     $("navBadge").style.display = on ? "grid" : "none";
-    $("vtag").style.display = on && latest ? "block" : "none";
-    if(on && latest) $("vtag").textContent = kindLabel(latest.kind)+" \u00B7 "+fmtTime(latest.t);
 
     if(on){
       if(alertSince===null) alertSince = Date.now();
