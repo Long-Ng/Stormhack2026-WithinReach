@@ -46,7 +46,7 @@ def test_fall_notifies_person_with_reply_buttons():
     assert urls == [f"http://192.168.1.9:5000/respond?id={inc.id}&answer=ok",
                     f"http://192.168.1.9:5000/respond?id={inc.id}&answer=help",
                     "tel:+15550001111"]
-    assert msg["click"] == f"http://192.168.1.9:5000/granny?id={inc.id}#fall"
+    assert msg["click"] == f"http://192.168.1.9:5000/?id={inc.id}#fall"
     assert inc.status == WAITING
 
 
