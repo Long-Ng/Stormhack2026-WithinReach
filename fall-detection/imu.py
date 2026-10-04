@@ -123,6 +123,9 @@ class PhyphoxReader:
     """
 
     def __init__(self, url: str, cfg: Config, maxlen: int = 3000):
+        url = url.strip()
+        if "://" not in url:
+            url = "http://" + url  # "172.16.x.x:8080" as Phyphox shows it, without the scheme
         self.url = url.rstrip("/")
         self.cfg = cfg
         self.samples: deque[tuple[float, float]] = deque(maxlen=maxlen)
