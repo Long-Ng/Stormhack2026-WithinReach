@@ -93,5 +93,16 @@ reply_timeout_s = 30.0        # person has this long to answer before the monito
 room_name = "Living room"
 public_url = ""               # empty = http://<this PC's Wi-Fi IP>:<port>
 
+[skeleton]
+privacy_view = false         # start in Privacy view (outline only, no camera picture); switchable on the phone page
+# Smoothing of the DRAWN skeleton (overlay and privacy view). Detection uses raw landmarks.
+# Measured on the benchmark clips: wobble 1.40 -> 0.45 px/frame, lag ~3 px when moving fast.
+skel_min_cutoff = 0.3        # lower = calmer when still, more lag
+skel_beta = 0.12             # higher = less lag when moving, a bit more wobble
+skel_d_cutoff = 0.3
+skel_body_speed = true       # judge speed from the whole body, so wobble does not loosen the filter
+skel_hide_visibility = 0.3   # a shown joint hides only below this (no blinking)
+skel_hold_s = 0.5            # keep the last skeleton this long when the pose drops out
+
 [display]
 fps_smoothing = 0.9

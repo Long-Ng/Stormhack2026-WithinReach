@@ -92,6 +92,16 @@ class Config:
     room_name: str = "Living room"
     public_url: str = ""  # address phones use to reach this PC; empty = http://<LAN IP>:<port>
 
+    privacy_view: bool = False  # start with the outline-only view on (the monitor can switch it)
+
+    # Skeleton display smoothing (drawing and privacy view only; detection uses raw landmarks)
+    skel_min_cutoff: float = 0.3  # Hz; lower = calmer when still, more lag
+    skel_beta: float = 0.12  # how fast the cutoff rises with joint speed (px/s); higher = less lag when moving
+    skel_d_cutoff: float = 0.3  # Hz; smoothing of the speed estimate itself
+    skel_body_speed: bool = True  # loosen the filter by whole-body speed, not each joint's own (ignores wobble)
+    skel_hide_visibility: float = 0.3  # a shown joint is hidden only below this (shown above min_visibility)
+    skel_hold_s: float = 0.5  # keep the last skeleton this long when the pose drops out
+
     # Display
     fps_smoothing: float = 0.9  # EMA factor for the FPS readout
 

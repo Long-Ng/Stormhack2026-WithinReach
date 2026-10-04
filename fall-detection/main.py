@@ -35,8 +35,9 @@ from events import ConsoleSink, FallEvent, FileSink, dispatch, save_snapshot
 from features import FeatureExtractor, FeatureLogger
 from imu import open_wearable
 from inject import KEYS as INJECT_KEYS, ClipInjector
-from overlay import draw_overlay, draw_skeleton, draw_text
+from overlay import draw_overlay, draw_skeleton, draw_text, render_privacy_frame
 from pose import PoseEstimator
+from smoothing import SkeletonStabilizer
 
 WINDOW = "Fall Detection"
 
@@ -142,6 +143,8 @@ def main() -> int:
     print(f"Using {source.label}")
 
     streamer = None if args.no_dashboard else start_dashboard(args, cfg)
+    if streamer is not None:
+        streamer.privacy = cfg.privacy_view
 
     fps = 0.0
     last_wall = time.perf_counter()
@@ -149,6 +152,8 @@ def main() -> int:
 
     extractor = FeatureExtractor(cfg)
     detector = FallDetector(cfg)
+    stabilizer = SkeletonStabilizer(cfg)  # calmer skeleton for display only
+    was_private = False
     cover = CoverReset(cfg) if cfg.cover_reset else None
     # Phone accelerometer; only for live sources, since its clock is the PC's.
     wearable = None if is_file else open_wearable(cfg)
@@ -196,13 +201,6 @@ def main() -> int:
             if alerts is not None:
                 manager.tick()  # escalate to the monitor when the person has not replied
 
-            # Clean frame for the dashboard: sent before any overlay is drawn on it.
-            if streamer is not None:
-                try:
-                    streamer.update(frame)
-                except Exception as e:
-                    print(f"[dashboard] update failed: {e!r}", file=sys.stderr)
-
             # Video files use their own timestamps so replays are reproducible; so does an
             # injected demo clip (continuing from where the live clock was).
             if injector is not None and injector.active:
@@ -221,6 +219,19 @@ def main() -> int:
                 print("Reset (camera covered)")
 
             lms = estimator.process(frame, ts_ms)
+            shown_lms = stabilizer.update(lms, ts_ms / 1000.0)  # drawing only; detection uses lms
+            # What the monitor may see: the camera picture, or in Privacy view a stick figure
+            # with no camera pixels (live view, snapshots and clips alike).
+            private = streamer is not None and streamer.privacy
+            if private and not was_private:
+                recorder.clear_preroll()  # no camera footage from before the switch in clips
+            was_private = private
+            view = render_privacy_frame(frame.shape, shown_lms, cfg.min_visibility) if private else frame
+            if streamer is not None:  # clean frame, before the debug overlay is drawn
+                try:
+                    streamer.update(view)
+                except Exception as e:
+                    print(f"[dashboard] update failed: {e!r}", file=sys.stderr)
             feats = extractor.update(lms, ts_ms / 1000.0)
             phone_still = None
             if wearable is not None:
@@ -233,9 +244,10 @@ def main() -> int:
             if detection is not None:
                 if detection.sensor:
                     print("(confirmed with phone sensor)")
-                handle_detection(detection, frame, lms, cfg, sinks, streamer, recorder)
+                # Privacy view: the snapshot is the stick figure too (it already has the skeleton).
+                handle_detection(detection, view, None if private else lms, cfg, sinks, streamer, recorder)
             # Clean frame (no overlay yet); the clip runs until the person is back up.
-            recorder.add(frame, ts_ms / 1000.0, detector.state is not State.UPRIGHT)
+            recorder.add(view, ts_ms / 1000.0, detector.state is not State.UPRIGHT)
 
             # Keep the dashboard alert (and the red box around the person) on while the fall stays confirmed.
             if streamer is not None:
@@ -255,7 +267,7 @@ def main() -> int:
             fps = inst if fps == 0.0 else cfg.fps_smoothing * fps + (1 - cfg.fps_smoothing) * inst
 
             if not args.no_display:
-                draw_overlay(frame, lms, feats, detector, fps, cfg.min_visibility, cover, wearable)
+                draw_overlay(frame, shown_lms, feats, detector, fps, cfg.min_visibility, cover, wearable)
                 if injector is not None and injector.active:  # this window only, not the dashboard
                     draw_text(frame, f"DEMO CLIP: {injector.name}", (frame.shape[1] // 2 - 140, 30),
                               (0, 0, 255), scale=0.7)
