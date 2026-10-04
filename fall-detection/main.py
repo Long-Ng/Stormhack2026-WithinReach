@@ -144,6 +144,8 @@ def main() -> int:
         sinks.append(manager)
         for path, handler in manager.routes().items():
             streamer.add_route(path, handler)
+        for path, handler in manager.upload_routes().items():
+            streamer.add_route(path, handler, body=True)
     # Optional extra push to the ntfy app (snapshot attached, buttons: camera / talk / call).
     if args.ntfy:
         try:
