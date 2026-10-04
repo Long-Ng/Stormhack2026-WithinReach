@@ -2,6 +2,7 @@
 
 Tiny web server (default http://localhost:5000):
   /                desktop dashboard (dashboard/index.html or dashboard.html)
+  /mainscreen      main screen (dashboard/mainscreen.html)
   /phone           phone page (dashboard/phone.html); first visit goes through /onboarding
   /onboarding      onboarding flow (dashboard/onboarding.html); /onboarding?force=1 runs it again
   /config.json     name / room / address / emergency number (+ onboarding data when present)
@@ -35,6 +36,7 @@ DASHBOARDS = [
     HERE / "index.html",
 ]
 PHONE_PAGES = [HERE.parent / "dashboard" / "phone.html", HERE / "phone.html"]
+MAIN_PAGES = [HERE.parent / "dashboard" / "mainscreen.html", HERE / "mainscreen.html"]
 ONBOARDING_PAGES = [HERE.parent / "dashboard" / "onboarding.html", HERE / "onboarding.html"]
 MEDIA_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".mp4": "video/mp4", ".webm": "video/webm",
                ".avi": "video/x-msvideo"}
@@ -165,6 +167,11 @@ class Streamer:
                         if not f:
                             return self._send(404, b"phone.html not found in ../dashboard/ or next to stream.py")
                         return self._send(200, f.read_bytes(), "text/html; charset=utf-8")
+                    if path in ("/mainscreen", "/mainscreen.html"):
+                        f = outer._find(MAIN_PAGES, "mainscreen.html")
+                        if not f:
+                            return self._send(404, b"mainscreen.html not found in ../dashboard/ or next to stream.py")
+                        return self._send(200, f.read_bytes(), "text/html; charset=utf-8")
                     if path in ("/onboarding", "/onboarding.html"):
                         f = outer._find(ONBOARDING_PAGES, "onboarding.html")
                         if not f:
@@ -209,7 +216,7 @@ class Streamer:
         self.server = ThreadingHTTPServer(("0.0.0.0", port), H)
         self.server.daemon_threads = True
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
-        print(f"[stream] dashboard -> http://localhost:{port}/   phone page -> /phone   onboarding -> /onboarding")
+        print(f"[stream] dashboard -> http://localhost:{port}/   main screen -> /mainscreen   phone page -> /phone   onboarding -> /onboarding")
         print(f"[stream] events folder -> {self.events_path() or '(not created yet)'}")
         try:  # onboarding is optional: the server still runs without onboarding.py
             from onboarding import Onboarding
