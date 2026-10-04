@@ -118,6 +118,8 @@ def main() -> int:
         sinks.append(manager)
         for path, handler in manager.routes().items():
             streamer.add_route(path, handler)
+        for path, handler in manager.upload_routes().items():
+            streamer.add_route(path, handler, body=True)
     recorder = ClipRecorder(cfg.events_dir, cfg.clip_pre_s, cfg.clip_tail_s, cfg.clip_max_after_s,
                             cfg.clip_max_width, cfg.clip_max_fps)
 

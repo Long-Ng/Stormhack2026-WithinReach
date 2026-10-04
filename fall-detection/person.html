@@ -5,77 +5,168 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Did you fall?</title>
 <style>
-  :root { --bg:#fff7f7; --fg:#1d1d1f; --muted:#6b6b70; --ok:#16a34a; --help:#e5484d; --call:#1d4ed8; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#1a1214; --fg:#f4f4f5; --muted:#a1a1aa; } }
-  * { box-sizing: border-box; }
-  body { margin:0; min-height:100vh; display:flex; flex-direction:column; gap:16px; padding:24px 16px;
+  :root { --bg:#fff7f7; --fg:#1d1d1f; --muted:#6b6b70; --card:#ffffff; --line:#eadede;
+          --ok:#16a34a; --help:#e5484d; --call:#1d4ed8; --talk:#7c3aed; --msg:#334155; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1a1214; --fg:#f4f4f5; --muted:#a1a1aa; --card:#241a1d; --line:#3a2c30; --msg:#475569; }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin:0; padding:20px 16px 32px; display:flex; flex-direction:column; gap:14px;
          font-family:system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--fg); }
-  h1 { font-size:2.2rem; margin:8px 0 0; text-align:center; }
-  #info { text-align:center; color:var(--muted); font-size:1.1rem; min-height:1.5em; }
-  #count { text-align:center; font-size:3.5rem; font-weight:700; font-variant-numeric:tabular-nums; }
-  button, a.btn { display:block; width:100%; border:0; border-radius:20px; padding:28px 16px;
-         font-size:1.8rem; font-weight:700; color:#fff; text-align:center; text-decoration:none; cursor:pointer; }
-  #ok { background:var(--ok); } #help { background:var(--help); } #call { background:var(--call); }
+  h1 { font-size:2rem; margin:4px 0 0; text-align:center; }
+  h2 { font-size:1rem; margin:10px 0 0; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+  #info { text-align:center; color:var(--muted); font-size:1.05rem; min-height:1.4em; }
+  #count { text-align:center; font-size:3rem; font-weight:700; font-variant-numeric:tabular-nums; min-height:1em; }
+  button, a.btn { display:block; width:100%; border:0; border-radius:18px; padding:22px 12px;
+         font-size:1.5rem; font-weight:700; color:#fff; text-align:center; text-decoration:none; cursor:pointer; }
   button:disabled { opacity:.45; }
-  #done { display:none; text-align:center; font-size:1.6rem; font-weight:600; padding:24px 0; }
+  #ok { background:var(--ok); } #help { background:var(--help); } #call { background:var(--call); }
+  #answered { display:none; text-align:center; font-size:1.4rem; font-weight:600; padding:8px 0; }
+  #talk { background:var(--talk); padding:34px 12px; font-size:1.6rem; user-select:none; -webkit-user-select:none;
+          touch-action:none; }
+  #talk.rec { background:var(--help); animation:pulse 1s infinite; }
+  @keyframes pulse { 50% { transform:scale(.97); } }
+  #talkNote { text-align:center; color:var(--muted); font-size:.95rem; min-height:1.2em; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .grid button { background:var(--msg); font-size:1.15rem; padding:18px 8px; }
+  #toast { position:fixed; left:16px; right:16px; bottom:16px; padding:14px; border-radius:14px;
+           background:var(--fg); color:var(--bg); text-align:center; font-weight:600; display:none; }
 </style>
 </head>
 <body>
   <h1>Did you fall?</h1>
   <div id="info">Loading…</div>
   <div id="count"></div>
-  <button id="ok">I'm OK</button>
-  <button id="help">I need help</button>
-  <a id="call" class="btn" href="tel:{{CALL_NUMBER}}">Call {{CALL_NUMBER}}</a>
-  <div id="done"></div>
+  <div id="answer">
+    <div class="grid">
+      <button id="ok">I'm OK</button>
+      <button id="help">I need help</button>
+    </div>
+  </div>
+  <div id="answered"></div>
+
+  <h2>Talk to your contact</h2>
+  <button id="talk">🎙 Hold to talk</button>
+  <div id="talkNote"></div>
+
+  <h2>Quick messages</h2>
+  <div class="grid">
+    <button data-key="cant_get_up">I can't get up</button>
+    <button data-key="hurt">I'm hurt</button>
+    <button data-key="call_me">Please call me</button>
+    <button data-key="ok_now">I'm OK now</button>
+  </div>
+
+  <a id="call" class="btn" href="tel:{{CALL_NUMBER}}">📞 Call {{CALL_NUMBER}}</a>
+  <div id="toast"></div>
 <script>
-const id = new URLSearchParams(location.search).get("id");
+const params = new URLSearchParams(location.search);
+let id = params.get("id") || "";
 const $ = s => document.getElementById(s);
 if (!"{{CALL_NUMBER}}") $("call").style.display = "none";
 let deadline = null, skew = 0;
 
+function toast(text, ms = 2500) {
+  $("toast").textContent = text; $("toast").style.display = "block";
+  clearTimeout(toast.t); toast.t = setTimeout(() => $("toast").style.display = "none", ms);
+}
+async function post(url, body) {
+  const r = await fetch(url, { method: "POST", body });
+  const text = await r.text();
+  if (!r.ok) throw new Error(text);
+  return text;
+}
+
+// --- I'm OK / I need help ---------------------------------------------------------
+function answered(text) {
+  $("answer").style.display = "none"; $("count").textContent = ""; deadline = null;
+  $("answered").textContent = text; $("answered").style.display = "block";
+}
 async function answer(a) {
   $("ok").disabled = $("help").disabled = true;
-  try {
-    const r = await fetch(`/respond?id=${encodeURIComponent(id)}&answer=${a}`, { method: "POST" });
-    show(await r.text());
-  } catch (e) {
-    $("ok").disabled = $("help").disabled = false;
-    $("info").textContent = "Could not reach the system. Use the Call button.";
-  }
-}
-function show(text) {
-  $("done").textContent = text; $("done").style.display = "block";
-  $("ok").style.display = $("help").style.display = "none"; $("count").textContent = "";
+  try { answered(await post(`/respond?id=${encodeURIComponent(id)}&answer=${a}`)); }
+  catch (e) { $("ok").disabled = $("help").disabled = false; toast("Could not reach the system. Use Call."); }
 }
 $("ok").onclick = () => answer("ok");
 $("help").onclick = () => answer("help");
 
+// --- quick messages ---------------------------------------------------------------
+document.querySelectorAll("[data-key]").forEach(b => b.onclick = async () => {
+  b.disabled = true;
+  try { await post(`/message?key=${b.dataset.key}&id=${encodeURIComponent(id)}`); toast(`Sent: "${b.textContent}"`); }
+  catch (e) { toast("Not sent. Use Call."); }
+  setTimeout(() => b.disabled = false, 1500);
+});
+
+// --- hold to talk -----------------------------------------------------------------
+// Browsers only allow the microphone on secure pages (https or localhost).
+const canTalk = window.isSecureContext && navigator.mediaDevices && window.MediaRecorder;
+let stream = null, rec = null, chunks = [], recStart = 0, recTimer = null;
+const mime = ["audio/webm", "audio/mp4", "audio/ogg"].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
+const ext = mime ? mime.split("/")[1] : "webm";
+
+if (!canTalk) {
+  $("talk").disabled = true;
+  $("talkNote").textContent = "Voice needs a secure page (https). Quick messages and Call still work.";
+}
+async function startTalk(ev) {
+  ev.preventDefault();
+  if (!canTalk || rec) return;
+  try { stream = stream || await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) { $("talkNote").textContent = "Microphone permission was denied."; return; }
+  chunks = []; rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+  rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+  rec.onstop = sendTalk;
+  rec.start(); recStart = Date.now();
+  $("talk").classList.add("rec");
+  recTimer = setInterval(() => $("talk").textContent = `● Recording ${Math.floor((Date.now() - recStart) / 1000)} s — release to send`, 200);
+}
+function stopTalk(ev) {
+  if (!rec) return;
+  ev && ev.preventDefault();
+  clearInterval(recTimer);
+  $("talk").classList.remove("rec"); $("talk").textContent = "🎙 Hold to talk";
+  rec.stop(); rec = null;
+}
+async function sendTalk() {
+  if (Date.now() - recStart < 600) { $("talkNote").textContent = "Hold the button while you speak."; return; }
+  $("talkNote").textContent = "Sending…";
+  try {
+    await post(`/talk?id=${encodeURIComponent(id)}&ext=${ext}`, new Blob(chunks, { type: mime || "audio/webm" }));
+    $("talkNote").textContent = "Voice message sent ✓";
+  } catch (e) { $("talkNote").textContent = "Voice message failed. Use Call."; }
+}
+$("talk").addEventListener("pointerdown", startTalk);
+["pointerup", "pointercancel", "pointerleave"].forEach(e => $("talk").addEventListener(e, stopTalk));
+$("talk").addEventListener("contextmenu", e => e.preventDefault());
+
+// --- live status ------------------------------------------------------------------
 async function poll() {
   try {
     const j = await (await fetch("/incidents.json", { cache: "no-store" })).json();
     skew = Date.now() / 1000 - j.now;
     const inc = j.incidents.find(i => i.id === id) || j.incidents[j.incidents.length - 1];
-    if (!inc) { $("info").textContent = "No fall alert right now."; return; }
+    if (!inc) { $("info").textContent = "No fall alert right now. You can still message your contact."; $("answer").style.display = "none"; return; }
+    id = inc.id;
     const at = new Date(inc.t * 1000).toLocaleTimeString();
     if (inc.status === "waiting") {
+      // A new fall: bring back the OK / help buttons if an earlier one was answered.
+      $("answer").style.display = ""; $("answered").style.display = "none";
+      $("ok").disabled = $("help").disabled = false;
       deadline = inc.t + j.reply_timeout_s;
       $("info").textContent = `Fall detected at ${at}. Your contact will be alerted if you don't answer.`;
     } else if (inc.status === "no_reply") {
-      // Monitor already alerted; the person can still say they are OK or ask for help.
       deadline = null; $("count").textContent = "";
       $("info").textContent = `Fall detected at ${at}. Your contact has been alerted.`;
     } else {
-      deadline = null;
-      show({ ok: "Glad you're OK", help: "Help is on the way" }[inc.status] || inc.status);
       $("info").textContent = `Fall detected at ${at}.`;
+      answered({ ok: "Glad you're OK", help: "Help is on the way" }[inc.status] || inc.status);
     }
   } catch (e) { $("info").textContent = "Connecting…"; }
 }
 setInterval(() => {
   if (deadline === null) return;
-  const left = Math.max(0, Math.ceil(deadline - (Date.now() / 1000 - skew)));
-  $("count").textContent = left + " s";
+  $("count").textContent = Math.max(0, Math.ceil(deadline - (Date.now() / 1000 - skew))) + " s";
 }, 250);
 poll(); setInterval(poll, 2000);
 </script>
