@@ -191,6 +191,8 @@ def main() -> int:
                 inc_id, report_dict(r, minutes, cfg.emergency_number, still)),
             is_open=manager.is_open, update_s=cfg.gemini_update_s,
             max_updates=int(cfg.gemini_max_minutes * 60 / cfg.gemini_update_s))
+        if streamer is not None:
+            streamer.set_config(gemini_falls=True)  # the monitor page words Privacy view honestly
         print(f"[gemini] fall analysis on ({cfg.gemini_model}), "
               f"checks every {cfg.gemini_update_s:g} s for {cfg.gemini_max_minutes:g} min")
     elif alerts is not None:
@@ -207,6 +209,8 @@ def main() -> int:
                 GeminiClient(gemini_key, cfg.gemini_model,
                              fallback_models=(cfg.gemini_fallback_model,)).analyze_scene,
                 zone_store, watcher)
+            if streamer is not None:
+                streamer.set_config(gemini_scan=True)  # empty-room pictures go to Gemini
         names = ", ".join(z.label for z in zone_store.zones) or "none yet"
         print(f"[zones] rest zones: {names}"
               + ("; Gemini rescans when the empty room changes" if scanner else

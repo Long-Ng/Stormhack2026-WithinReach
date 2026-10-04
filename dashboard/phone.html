@@ -296,16 +296,25 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
   document.querySelectorAll("[data-tg]").forEach(function(b){b.onclick=function(){b.classList.toggle("act");};});
   // ---- Privacy view: one shared setting on the camera PC (it stops sending the camera picture) ----
   function showPriv(on){ $("priv").checked=on; $("privPill").style.display=on?"block":"none"; }
-  function privHint(){ $("privHint").textContent="Show "+cfg.name+" as a simple outline instead of the camera picture. Only the outline is shared, including alert photos and clips."; }
+  // Privacy view changes what family sees. Gemini (only when its key is set) still gets real
+  // camera pictures: a short clip of a detected fall, and empty-room pictures for the rest zones.
+  function privHint(){
+    var what=[];
+    if(cfg.gemini_falls) what.push("checks a short camera clip when a fall is detected");
+    if(cfg.gemini_scan) what.push((what.length?"and ":"")+"looks at pictures of the room taken when no one is in view, to find the bed and sofa");
+    $("privHint").textContent="Show "+cfg.name+" as a simple outline instead of the camera picture. "+
+      (what.length?"Family sees only the outline, including alert photos and clips. Google's Gemini AI still "+what.join(" ")+"."
+                  :"Only the outline is shared, including alert photos and clips.");
+  }
   function loadPriv(){ fetch("/api/privacy",{cache:"no-store"}).then(function(r){return r.json();}).then(function(j){showPriv(!!j.on);}).catch(function(){}); }
   $("priv").onchange=function(){
     var want=$("priv").checked;
     fetch("/api/privacy?on="+(want?1:0),{method:"POST"}).then(function(r){return r.json();})
-      .then(function(j){showPriv(!!j.on); toast(j.on?"Privacy view on: only an outline is shown.":"Camera picture is back on.");})
+      .then(function(j){showPriv(!!j.on); toast(j.on?"Privacy view on: family sees only an outline.":"Camera picture is back on.");})
       .catch(function(){showPriv(!want); toast("Couldn't reach the camera. Try again.");});
   };
   loadPriv(); setInterval(loadPriv,5000);  // someone else may switch it
-  fetch("/config.json").then(function(r){return r.json();}).then(function(c){if(c.name)cfg.name=c.name;privHint();}).catch(function(){});
+  fetch("/config.json").then(function(r){return r.json();}).then(function(c){if(c.name)cfg.name=c.name;cfg.gemini_falls=!!c.gemini_falls;cfg.gemini_scan=!!c.gemini_scan;privHint();}).catch(function(){});
 
   video(); poll(); setInterval(poll,2000);
 })();
