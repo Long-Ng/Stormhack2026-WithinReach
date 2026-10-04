@@ -29,12 +29,18 @@
   #talkNote { text-align:center; color:var(--muted); font-size:.95rem; min-height:1.2em; }
   .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .grid button { background:var(--msg); font-size:1.15rem; padding:18px 8px; }
+  #arm { background:var(--call); font-size:1.25rem; padding:16px 12px; }
+  #armNote { text-align:center; color:var(--muted); font-size:.95rem; display:none; }
+  body.alarm { animation:flash 1s steps(2) infinite; }
+  @keyframes flash { 50% { background:var(--help); } }
   #toast { position:fixed; left:16px; right:16px; bottom:16px; padding:14px; border-radius:14px;
            background:var(--fg); color:var(--bg); text-align:center; font-weight:600; display:none; }
 </style>
 </head>
 <body>
   <h1>Did you fall?</h1>
+  <button id="arm">🔔 Tap to turn on the fall alarm</button>
+  <div id="armNote">Alarm on. Keep this page open and the phone plugged in.</div>
   <div id="info">Loading…</div>
   <div id="count"></div>
   <div id="answer">
@@ -59,6 +65,7 @@
 
   <a id="call" class="btn" href="tel:{{CALL_NUMBER}}">📞 Call {{CALL_NUMBER}}</a>
   <div id="toast"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/nosleep/0.12.0/NoSleep.min.js"></script>
 <script>
 const params = new URLSearchParams(location.search);
 let id = params.get("id") || "";
@@ -79,6 +86,7 @@ async function post(url, body) {
 
 // --- I'm OK / I need help ---------------------------------------------------------
 function answered(text) {
+  stopAlarm();
   $("answer").style.display = "none"; $("count").textContent = ""; deadline = null;
   $("answered").textContent = text; $("answered").style.display = "block";
 }
@@ -140,12 +148,49 @@ $("talk").addEventListener("pointerdown", startTalk);
 ["pointerup", "pointercancel", "pointerleave"].forEach(e => $("talk").addEventListener(e, stopTalk));
 $("talk").addEventListener("contextmenu", e => e.preventDefault());
 
+// --- alarm: screen kept on; sound + vibration while a fall waits for an answer ------
+// Browsers only allow sound, vibration and keeping the screen on after a tap, hence
+// the arm button. On plain http (phone -> PC over Wi-Fi) the native Wake Lock API is
+// unavailable, so NoSleep falls back to looping a tiny silent video.
+let audio = null, noSleep = null, armed = false, alarmTimer = null;
+function beep(t0, freq) {
+  const o = audio.createOscillator(), g = audio.createGain();
+  o.type = "square"; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.25, t0); g.gain.setValueAtTime(0, t0 + 0.22);
+  o.connect(g).connect(audio.destination); o.start(t0); o.stop(t0 + 0.25);
+}
+function ring() {
+  if (audio) { const t = audio.currentTime; beep(t, 880); beep(t + 0.3, 660); }
+  if (navigator.vibrate) navigator.vibrate([400, 200, 400]);
+}
+function startAlarm() {
+  if (!armed || alarmTimer) return;
+  document.body.classList.add("alarm");
+  ring(); alarmTimer = setInterval(ring, 1200);
+}
+function stopAlarm() {
+  clearInterval(alarmTimer); alarmTimer = null;
+  document.body.classList.remove("alarm");
+  if (navigator.vibrate) navigator.vibrate(0);
+}
+$("arm").onclick = async () => {
+  try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); await audio.resume(); }
+  catch (e) { toast("Sound is not available on this phone."); }
+  try { noSleep = noSleep || new NoSleep(); await noSleep.enable(); }
+  catch (e) { toast("Could not keep the screen on. Set the screen timeout to Never."); }
+  armed = true;
+  $("arm").style.display = "none"; $("armNote").style.display = "block";
+  if (audio) beep(audio.currentTime, 880);  // confirms the sound works
+  poll();
+};
+
 // --- live status ------------------------------------------------------------------
 async function poll() {
   try {
     const j = await (await fetch("/incidents.json", { cache: "no-store" })).json();
     skew = Date.now() / 1000 - j.now;
     const inc = j.incidents.find(i => i.id === id) || j.incidents[j.incidents.length - 1];
+    if (!inc || inc.status !== "waiting") stopAlarm();
     if (!inc) { $("info").textContent = "No fall alert right now. You can still message your contact."; $("answer").style.display = "none"; return; }
     id = inc.id;
     const at = new Date(inc.t * 1000).toLocaleTimeString();
@@ -155,6 +200,7 @@ async function poll() {
       $("ok").disabled = $("help").disabled = false;
       deadline = inc.t + j.reply_timeout_s;
       $("info").textContent = `Fall detected at ${at}. Your contact will be alerted if you don't answer.`;
+      startAlarm();
     } else if (inc.status === "no_reply") {
       deadline = null; $("count").textContent = "";
       $("info").textContent = `Fall detected at ${at}. Your contact has been alerted.`;

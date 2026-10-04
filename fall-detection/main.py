@@ -10,7 +10,7 @@ python main.py --params other.toml                    # use a different paramete
 python main.py --port 5050                            # dashboard server port (default 5000)
 python main.py --no-dashboard                         # do not start the dashboard server
 python main.py --inject fall.mp4 --inject-hold 10     # debug: press i to splice a clip into the live feed
-python main.py --ntfy my-secret-topic --name Nick     # extra phone push through the ntfy app
+python main.py --name Nick --phone 911                # name and Call number on the phone page + alerts
 
 While running: desktop dashboard http://localhost:5000/ , phone page http://<PC address>:5000/phone
 """
@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import os
 import sys
 import time
 
@@ -56,10 +55,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--no-display", action="store_true", help="run headless")
     p.add_argument("--port", type=int, default=5000, help="dashboard server port")
     p.add_argument("--no-dashboard", action="store_true", help="do not start the dashboard server")
-    p.add_argument("--ntfy", metavar="TOPIC", default=os.environ.get("FALL_NTFY_TOPIC"),
-                   help="ntfy topic for an extra phone push (or set env FALL_NTFY_TOPIC)")
-    p.add_argument("--ntfy-server", default=os.environ.get("FALL_NTFY_SERVER", "https://ntfy.sh"),
-                   help="ntfy server (default https://ntfy.sh)")
     p.add_argument("--name", default="Your family member", help="name of the monitored person (phone page + push)")
     p.add_argument("--room", default="Living room", help="room name shown on the phone page")
     p.add_argument("--address", default="", help="home address shown on the phone page")
@@ -146,7 +141,7 @@ def main() -> int:
     # Add new alert channels here; nothing else needs to change.
     sinks = [ConsoleSink(), FileSink(cfg.events_dir)]
     # Phone alerts: person first, then the monitor. Replies arrive on the dashboard server.
-    alerts = open_alerts(cfg, args.port) if streamer is not None else None
+    alerts = open_alerts(cfg, args.port, args.name, args.phone) if streamer is not None else None
     if alerts is not None:
         manager, publisher = alerts
         sinks.append(manager)
@@ -154,13 +149,6 @@ def main() -> int:
             streamer.add_route(path, handler)
         for path, handler in manager.upload_routes().items():
             streamer.add_post_route(path, handler)
-    # Optional extra push to the ntfy app (snapshot attached, buttons: camera / talk / call).
-    if args.ntfy:
-        try:
-            from notify import NtfySink
-            sinks.append(NtfySink(args.ntfy, args.ntfy_server, args.port, args.name, args.phone))
-        except Exception as e:
-            print(f"[notify] disabled: {e!r}", file=sys.stderr)
     recorder = ClipRecorder(cfg.events_dir, cfg.clip_pre_s, cfg.clip_tail_s, cfg.clip_max_after_s,
                             cfg.clip_max_width, cfg.clip_max_fps)
 

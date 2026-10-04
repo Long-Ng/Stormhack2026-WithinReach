@@ -83,8 +83,8 @@ class Config:
 
     # Phone alerts (ntfy). Topics and numbers belong in params.local.toml, not in git.
     ntfy_server: str = "https://ntfy.sh"
-    ntfy_person_topic: str = ""  # the person's phone subscribes to this; empty = alerts off
-    ntfy_monitor_topic: str = ""  # the monitor's phone subscribes to this
+    ntfy_person_topic: str = ""  # the person's phone subscribes to this; empty = no notification
+    ntfy_monitor_topic: str = ""  # the monitor's phone subscribes to this; empty = no notification
     ntfy_attach_snapshot: bool = True  # monitor notification includes the snapshot image
     reply_timeout_s: float = 30.0  # no reply from the person this long -> alert the monitor
     call_number: str = ""  # "Call" button on the person's phone; NOT 911 while testing

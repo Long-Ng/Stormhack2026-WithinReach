@@ -83,7 +83,8 @@ class NtfyPublisher:
         self._thread.start()
 
     def publish(self, message: dict) -> None:
-        self._q.put(message)
+        if message.get("topic"):  # an empty topic turns that phone's notifications off
+            self._q.put(message)
 
     def _run(self) -> None:
         while (msg := self._q.get()) is not None:
@@ -102,8 +103,12 @@ class NtfyPublisher:
 
 class AlertManager:
     def __init__(self, cfg: Config, base_url: str, publish: Callable[[dict], None],
-                 clock: Callable[[], float] = time.time):
+                 clock: Callable[[], float] = time.time, person_name: str = "",
+                 emergency_number: str = ""):
         self.cfg = cfg
+        # Same values as the phone page (main.py --name / --phone).
+        self.person_name = person_name or "Your family member"
+        self.emergency_number = emergency_number
         self.base_url = base_url.rstrip("/")
         self.publish = publish
         self.clock = clock
@@ -285,21 +290,32 @@ class AlertManager:
         }
 
     def _monitor_message(self, inc: Incident) -> dict:
-        why = ("asked for help" if inc.status == HELP
-               else f"did not reply within {self.cfg.reply_timeout_s:.0f} s")
+        """Sent only once the person asked for help or did not answer, so it can say so."""
+        name = self.person_name
+        if inc.status == HELP:
+            title = f"{name} needs help — check on them now"
+            why = f"{name} pressed \"I need help\" after a fall at {_hhmm(inc.t)}."
+        else:
+            title = f"{name} isn't responding — check on them now"
+            why = (f"Fall detected at {_hhmm(inc.t)} and no answer for "
+                   f"{self.cfg.reply_timeout_s:.0f} s.")
+        call = self.emergency_number or self.cfg.person_number
+        phone_page = f"{self.base_url}/phone"
         msg = {
             "topic": self.cfg.ntfy_monitor_topic,
-            "title": f"FALL - {self.cfg.room_name}",
-            "message": f"Fall detected at {_hhmm(inc.t)}. The person {why}.",
+            "title": title,
+            "message": (f"{why} Watch the live camera to see how they are, then talk to them"
+                        + (f" or call {call}." if call else ".")),
             "priority": 5,
-            "tags": ["warning"],
-            "click": self._dashboard_url(inc),
-            "actions": [{"action": "view", "label": "Open dashboard",
-                         "url": self._dashboard_url(inc)}],
+            "tags": ["rotating_light"],
+            "click": phone_page,
+            "actions": [  # ntfy allows at most 3
+                {"action": "view", "label": "Open live camera", "url": phone_page},
+                {"action": "view", "label": "Push to talk", "url": f"{phone_page}#talk"},
+            ],
         }
-        if self.cfg.person_number:
-            msg["actions"].append({"action": "view", "label": "Call person",
-                                   "url": f"tel:{self.cfg.person_number}"})
+        if call:
+            msg["actions"].append({"action": "view", "label": f"Call {call}", "url": f"tel:{call}"})
         if inc.snapshot and self.cfg.ntfy_attach_snapshot:
             msg["attach"] = f"{self.base_url}/events/{quote(inc.snapshot)}"
         return msg
@@ -322,16 +338,18 @@ def _hhmm(t: float) -> str:
     return datetime.fromtimestamp(t).strftime("%H:%M:%S")
 
 
-def open_alerts(cfg: Config, port: int) -> tuple[AlertManager, NtfyPublisher] | None:
-    """Build the alert manager, or None when no ntfy topics are configured."""
-    if not (cfg.ntfy_person_topic and cfg.ntfy_monitor_topic):
-        print("[alerts] off: set ntfy_person_topic and ntfy_monitor_topic in params.local.toml")
-        return None
+def open_alerts(cfg: Config, port: int, person_name: str = "",
+                emergency_number: str = "") -> tuple[AlertManager, NtfyPublisher]:
+    """Build the alert manager. An empty ntfy topic only skips that phone's
+    notifications: the person page and the reply flow run either way, so a phone
+    keeping /person open gets the fall screen with no notification to tap."""
     base = cfg.public_url or lan_url(port)
     pub = NtfyPublisher(cfg.ntfy_server)
-    print(f"[alerts] ntfy {cfg.ntfy_server} person='{cfg.ntfy_person_topic}' "
-          f"monitor='{cfg.ntfy_monitor_topic}', replies via {base}")
-    return AlertManager(cfg, base, pub.publish), pub
+    print(f"[alerts] ntfy {cfg.ntfy_server} person='{cfg.ntfy_person_topic or '(off)'}' "
+          f"monitor='{cfg.ntfy_monitor_topic or '(off)'}', replies via {base}")
+    print(f"[alerts] person page -> {base}/person")
+    return AlertManager(cfg, base, pub.publish, person_name=person_name,
+                        emergency_number=emergency_number), pub
 
 
 def demo() -> int:
@@ -340,10 +358,7 @@ def demo() -> int:
     from stream import Streamer
     cfg = Config.load()
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 5000
-    built = open_alerts(cfg, port)
-    if built is None:
-        return 1
-    manager, publisher = built
+    manager, publisher = open_alerts(cfg, port)
     streamer = Streamer(port=port, events_dir=cfg.events_dir)
     for path, handler in manager.routes().items():
         streamer.add_route(path, handler)

@@ -63,7 +63,7 @@ def test_no_reply_escalates_once_after_timeout():
     assert len(sent) == 1
     clock.t = T0 + 30; m.tick(); m.tick()
     assert [s["topic"] for s in sent] == ["person-x", "monitor-x"]
-    assert "did not reply" in sent[1]["message"]
+    assert "isn't responding" in sent[1]["title"] and "no answer for 30 s" in sent[1]["message"]
     assert sent[1]["attach"].endswith("/events/20261003-153435-047.jpg")
     assert only_incident(m).status == NO_REPLY
 
@@ -83,7 +83,7 @@ def test_help_reply_alerts_monitor_immediately_and_once():
     m.respond(inc_id, HELP); m.respond(inc_id, HELP)
     clock.t = T0 + 60; m.tick()
     assert [s["topic"] for s in sent] == ["person-x", "monitor-x"]
-    assert "asked for help" in sent[1]["message"]
+    assert "needs help" in sent[1]["title"] and "I need help" in sent[1]["message"]
 
 
 def test_ok_after_escalation_tells_monitor_it_is_resolved():
@@ -197,3 +197,30 @@ def test_voice_upload_over_real_server(tmp_path):
         assert len(list((tmp_path / "voice").iterdir())) == 1  # nothing saved for it
     finally:
         s.close()
+
+
+def test_publisher_skips_messages_without_a_topic(monkeypatch):
+    from alerts import NtfyPublisher
+    pub = NtfyPublisher("http://ntfy.invalid")
+    monkeypatch.setattr(pub._q, "put", lambda m: sent.append(m))
+    sent = []
+    pub.publish({"topic": "", "title": "Did you fall?"})
+    pub.publish({"topic": "monitor-x", "title": "FALL"})
+    assert [m["topic"] for m in sent] == ["monitor-x"]
+
+
+def test_monitor_alert_matches_the_phone_page_design():
+    cfg = Config(ntfy_person_topic="person-x", ntfy_monitor_topic="monitor-x", reply_timeout_s=30.0)
+    sent, clock = [], Clock()
+    m = AlertManager(cfg, "http://192.168.1.9:5000", sent.append, clock,
+                     person_name="Nick", emergency_number="555")
+    m.send(fall())
+    m.respond(only_incident(m).id, HELP)
+    msg = sent[1]
+    assert msg["title"] == "Nick needs help — check on them now"
+    assert msg["click"] == "http://192.168.1.9:5000/phone"
+    assert [(a["label"], a["url"]) for a in msg["actions"]] == [
+        ("Open live camera", "http://192.168.1.9:5000/phone"),
+        ("Push to talk", "http://192.168.1.9:5000/phone#talk"),
+        ("Call 555", "tel:555"),
+    ]
