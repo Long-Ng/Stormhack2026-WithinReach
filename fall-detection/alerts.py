@@ -167,7 +167,8 @@ class AlertManager:
         }
 
     def upload_routes(self) -> dict:
-        """Routes that need the request body: handler(query, body)."""
+        """POST routes that need the request body: handler(query, body, headers),
+        for Streamer.add_post_route."""
         return {"/talk": self._route_talk}
 
     # --- person -> monitor communication --------------------------------------------
@@ -225,7 +226,7 @@ class AlertManager:
         msg = self.send_message(q.get("key", ""), q.get("id", ""))
         return (200 if msg == "Sent" else 400), "text/plain; charset=utf-8", msg.encode()
 
-    def _route_talk(self, q, body):
+    def _route_talk(self, q, body, headers=None):
         msg = self.save_voice(body, q.get("ext", "webm"), q.get("id", ""))
         return (200 if msg == "Sent" else 400), "text/plain; charset=utf-8", msg.encode()
 
@@ -347,7 +348,7 @@ def demo() -> int:
     for path, handler in manager.routes().items():
         streamer.add_route(path, handler)
     for path, handler in manager.upload_routes().items():
-        streamer.add_route(path, handler, body=True)
+        streamer.add_post_route(path, handler)
     snaps = sorted(Path(cfg.events_dir).glob("*.jpg"), key=lambda p: p.stat().st_mtime)
     manager.send(FallEvent(timestamp=time.time(), kind="fall", peak_hip_vel=3.0,
                            torso_angle=95.0, snapshot_path=str(snaps[-1]) if snaps else None,

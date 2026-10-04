@@ -170,14 +170,14 @@ def test_voice_rejects_bad_input_and_path_tricks(tmp_path):
 
 
 def test_voice_upload_over_real_server(tmp_path):
-    from stream import MAX_UPLOAD_BYTES, Streamer
+    from stream import MAX_BODY, Streamer
     m, sent, _ = make(events_dir=str(tmp_path))
     s = Streamer(port=5096, events_dir=tmp_path)
     try:
         for path, h in m.routes().items():
             s.add_route(path, h)
         for path, h in m.upload_routes().items():
-            s.add_route(path, h, body=True)
+            s.add_post_route(path, h)
         base = "http://127.0.0.1:5096"
         audio = b"\x1aE\xdf\xa3" + b"y" * 2000
         req = urllib.request.Request(base + "/talk?ext=webm", data=audio, method="POST")
@@ -188,7 +188,7 @@ def test_voice_upload_over_real_server(tmp_path):
         assert urllib.request.urlopen(req).read() == b"Sent"
         j = json.load(urllib.request.urlopen(base + "/messages.json"))
         assert [x["kind"] for x in j["messages"]] == ["voice", "text"]
-        big = urllib.request.Request(base + "/talk?ext=webm", data=b"z" * (MAX_UPLOAD_BYTES + 1), method="POST")
+        big = urllib.request.Request(base + "/talk?ext=webm", data=b"z" * (MAX_BODY + 1), method="POST")
         # Refused without reading the body: the client sees a 413 or the connection drop.
         with pytest.raises((urllib.error.HTTPError, ConnectionError)) as e:
             urllib.request.urlopen(big)
