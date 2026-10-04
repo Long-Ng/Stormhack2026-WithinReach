@@ -219,6 +219,12 @@ def main() -> int:
             streamer.add_route("/zones.json", lambda q: (
                 200, "application/json", json.dumps(zone_store.as_json()).encode()))
 
+    if not args.no_display:
+        # Resizable, so it can be enlarged for a demo screen; F toggles fullscreen.
+        cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(WINDOW, 960, 720)
+    fullscreen = False
+
     with contextlib.ExitStack() as stack:
         stack.callback(recorder.close)  # finish the clip in progress on exit
         if alerts is not None:
@@ -335,6 +341,10 @@ def main() -> int:
                 key = cv2.waitKey(1) & 0xFF
                 if key in (ord("q"), 27):  # q or Esc
                     break
+                if key in (ord("f"), ord("F")):
+                    fullscreen = not fullscreen
+                    cv2.setWindowProperty(WINDOW, cv2.WND_PROP_FULLSCREEN,
+                                          cv2.WINDOW_FULLSCREEN if fullscreen else cv2.WINDOW_NORMAL)
                 if key in INJECT_KEYS:
                     if injector is None:
                         print("[inject] start main.py with --inject <video or folder> to use I / Space")
