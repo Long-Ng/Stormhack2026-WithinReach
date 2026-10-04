@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -47,8 +47,8 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
 </head>
 <body>
 <div class="hdr" id="hdr">
-  <div class="l1"><span id="hL">&#9888; ĐANG THEO DÕI</span><span id="hR"></span></div>
-  <h1 id="hT">Đang kết nối...</h1>
+  <div class="l1"><span id="hL">&#9888; MONITORING</span><span id="hR"></span></div>
+  <h1 id="hT">Connecting...</h1>
   <p id="hS"></p>
 </div>
 
@@ -56,54 +56,54 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
   <div class="video">
     <span class="pill live off" id="live">LIVE</span><span class="pill clk" id="clk">--</span>
     <img id="vid" alt="">
-    <div class="vmsg" id="vmsg">Đang chờ video từ main.py...</div>
+    <div class="vmsg" id="vmsg">Waiting for video from main.py...</div>
     <span class="tag" id="vtag"></span>
   </div>
 
-  <div class="voice" id="voice">&#128266; Giọng nói của bạn đang phát trong phòng</div>
+  <div class="voice" id="voice">&#128266; Your voice is playing in the room</div>
 
   <div class="card">
-    <small>CẬP NHẬT TRỰC TIẾP</small>
-    <div id="updates"><div class="empty">Chưa có cập nhật.</div></div>
+    <small>LIVE UPDATES</small>
+    <div id="updates"><div class="empty">No updates yet.</div></div>
   </div>
 
   <div class="cd" id="cd"></div>
 
   <div class="sub">
-    <button id="handled">Đánh dấu đã xử lý</button>
-    <button id="settings">Thông tin</button>
+    <button id="handled">Mark as handled</button>
+    <button id="settings">Info</button>
   </div>
 </div>
 
 <div class="bar">
-  <button id="talk">&#127908;<br>Giữ để nói</button>
-  <a class="call" id="call" href="tel:911">&#128222;<br>Gọi 911</a>
+  <button id="talk">&#127908;<br>Hold to talk</button>
+  <a class="call" id="call" href="tel:911">&#128222;<br>Call 911</a>
 </div>
 
 <div class="toast" id="toast"></div>
-<div class="modal" id="modal"><img id="mImg" alt=""><p id="mTxt"></p><button id="mClose">Đóng</button></div>
+<div class="modal" id="modal"><img id="mImg" alt=""><p id="mTxt"></p><button id="mClose">Close</button></div>
 
 <script>
 (function(){
   var $=function(i){return document.getElementById(i);};
-  var cfg={name:"Người thân",room:"Phòng khách",address:"",phone:"911",countdown:120,push:false,talk:false};
+  var cfg={name:"Your family member",room:"Living room",address:"",phone:"911",countdown:120,push:false,talk:false};
   var events=[], st={alert:false,offset:0,srv:false,cam:false,text:""}, logs=[];
   var handled=JSON.parse(localStorage.getItem("fd.phone.handled")||"{}");
   var lastName=null, first=true, audio=null;
 
   function pad(n){return (n<10?"0":"")+n;}
   function hm(t){var d=new Date(t*1000),h=d.getHours();return (h%12||12)+":"+pad(d.getMinutes())+" "+(h>=12?"PM":"AM");}
-  function full(t){return new Date(t*1000).toLocaleString("vi-VN");}
+  function full(t){return new Date(t*1000).toLocaleString();}
   function nowS(){return Date.now()/1000+st.offset;}
-  function ago(t){var s=Math.max(0,Math.round(nowS()-t)); if(s<60) return s+" giây trước"; if(s<3600) return Math.floor(s/60)+" phút trước"; return Math.floor(s/3600)+" giờ trước";}
-  function kind(k){return k==="prolonged_lying"?"Nằm bất động lâu":"Té ngã";}
+  function ago(t){var s=Math.max(0,Math.round(nowS()-t)); if(s<60) return s+" s ago"; if(s<3600) return Math.floor(s/60)+" min ago"; return Math.floor(s/3600)+" h ago";}
+  function kind(k){return k==="prolonged_lying"?"Prolonged lying":"Fall";}
   function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
   function latest(){return events.length?events[events.length-1]:null;}
   function log(t,c){logs.push({t:Date.now()/1000+st.offset,text:t,color:c||""}); if(logs.length>20) logs.shift();}
   function toast(m){var t=$("toast");t.textContent=m;t.style.display="block";clearTimeout(t._h);t._h=setTimeout(function(){t.style.display="none";},3500);}
 
   function applyCfg(){
-    $("call").href="tel:"+cfg.phone; $("call").innerHTML="&#128222;<br>Gọi "+esc(cfg.phone);
+    $("call").href="tel:"+cfg.phone; $("call").innerHTML="&#128222;<br>Call "+esc(cfg.phone);
   }
   fetch("/config.json").then(function(r){return r.json();}).then(function(c){cfg=Object.assign(cfg,c);applyCfg();render();}).catch(function(){});
 
@@ -113,7 +113,7 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
       o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+.6);}catch(e){}
   }
   function alarm(e){ if(navigator.vibrate) navigator.vibrate([400,150,400,150,600]); beep();
-    if(window.Notification&&Notification.permission==="granted"){try{new Notification(cfg.name+" có thể đã ngã",{body:full(e.t),icon:e.url});}catch(x){}} }
+    if(window.Notification&&Notification.permission==="granted"){try{new Notification(cfg.name+" may have fallen",{body:full(e.t),icon:e.url});}catch(x){}} }
 
   function video(){
     var v=$("vid"); v.onload=function(){st.cam=true;$("vmsg").style.display="none";render();};
@@ -125,10 +125,10 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
     fetch("/events.json",{cache:"no-store"}).then(function(r){return r.json();}).then(function(d){
       var firstOk=!st.srv; st.srv=true; st.offset=d.now-Date.now()/1000;
       events=d.events||[]; var l=latest();
-      if(l&&l.name!==lastName){ if(!first){alarm(l);log("Phát hiện "+kind(l.kind).toLowerCase()+" trong "+cfg.room,"red");} lastName=l.name; }
-      if(d.alert&&!st.alert) log("Chưa thấy chuyển động kể từ lúc ngã","amber");
+      if(l&&l.name!==lastName){ if(!first){alarm(l);log(kind(l.kind)+" detected in the "+cfg.room.toLowerCase(),"red");} lastName=l.name; }
+      if(d.alert&&!st.alert) log("No movement since the fall","amber");
       st.alert=!!d.alert; st.text=d.alert_text||""; first=false;
-      if(firstOk) log("Đã kết nối máy chủ");
+      if(firstOk) log("Connected to the server");
       render();
     }).catch(function(){ st.srv=false; render(); });
   }
@@ -137,25 +137,25 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
     var l=latest(); var active=st.alert&&l&&!handled[l.name];
     $("hdr").className="hdr"+(active?" red":""); $("theme").content=active?"#b3261e":"#1d5c4c";
     if(active){
-      $("hL").innerHTML="&#9888; "+(l.kind==="prolonged_lying"?"BẤT ĐỘNG LÂU":"FALL DETECTED"); $("hR").textContent=ago(l.t);
-      $("hT").textContent=cfg.name+" có thể đã ngã"; $("hS").textContent=cfg.room+(cfg.address?" · "+cfg.address:"");
+      $("hL").innerHTML="&#9888; "+(l.kind==="prolonged_lying"?"PROLONGED LYING":"FALL DETECTED"); $("hR").textContent=ago(l.t);
+      $("hT").textContent=cfg.name+" may have fallen"; $("hS").textContent=cfg.room+(cfg.address?" · "+cfg.address:"");
     } else {
-      $("hL").innerHTML="&#128737; ĐANG THEO DÕI"; $("hR").textContent=l?"Lần cuối: "+ago(l.t):"";
-      $("hT").textContent=st.srv?"Đang theo dõi "+cfg.name:"Mất kết nối máy chủ"; $("hS").textContent=cfg.room+(cfg.address?" · "+cfg.address:"");
+      $("hL").innerHTML="&#128737; MONITORING"; $("hR").textContent=l?"Last event: "+ago(l.t):"";
+      $("hT").textContent=st.srv?"Watching over "+cfg.name:"Lost connection to the server"; $("hS").textContent=cfg.room+(cfg.address?" · "+cfg.address:"");
     }
     var on=st.srv&&st.cam; $("live").classList.toggle("off",!on);
     var tg=$("vtag"); if(active){tg.style.display="block";tg.textContent=kind(l.kind)+" · "+hm(l.t);} else tg.style.display="none";
 
     var items=logs.map(function(x){return {t:x.t,html:esc(x.text),color:x.color};});
-    events.slice(-6).forEach(function(e){items.push({t:e.t,html:'<a class="lnk" data-ev="'+esc(e.name)+'">'+kind(e.kind)+' phát hiện trong '+esc(cfg.room)+'</a>',color:"red"});});
-    if(cfg.push&&l) items.push({t:l.t+1,html:"Đã gửi cảnh báo tới điện thoại này",color:""});
+    events.slice(-6).forEach(function(e){items.push({t:e.t,html:'<a class="lnk" data-ev="'+esc(e.name)+'">'+kind(e.kind)+' detected in the '+esc(cfg.room.toLowerCase())+'</a>',color:"red"});});
+    if(cfg.push&&l) items.push({t:l.t+1,html:"Alert sent to this phone",color:""});
     items.sort(function(a,b){return b.t-a.t;});
-    if(active) items.unshift({t:nowS(),html:"Đang chờ người thân phản hồi",color:"",now:true});
+    if(active) items.unshift({t:nowS(),html:"Waiting for a response",color:"",now:true});
     $("updates").innerHTML=items.length?items.slice(0,7).map(function(x){
-      return '<div class="upd'+(x.now?' now':'')+'"><span class="tm">'+(x.now?"Bây giờ":hm(x.t))+'</span><span class="dot '+x.color+'"></span><span>'+(x.now?"<b>"+x.html+"</b>":x.html)+'</span></div>';
-    }).join(""):'<div class="empty">Chưa có cập nhật.</div>';
+      return '<div class="upd'+(x.now?' now':'')+'"><span class="tm">'+(x.now?"Now":hm(x.t))+'</span><span class="dot '+x.color+'"></span><span>'+(x.now?"<b>"+x.html+"</b>":x.html)+'</span></div>';
+    }).join(""):'<div class="empty">No updates yet.</div>';
 
-    $("handled").style.display=l?"":"none"; $("handled").textContent=l&&handled[l.name]?"Bỏ đánh dấu đã xử lý":"Đánh dấu đã xử lý";
+    $("handled").style.display=l?"":"none"; $("handled").textContent=l&&handled[l.name]?"Unmark as handled":"Mark as handled";
     tickCd();
   }
 
@@ -165,7 +165,7 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
     if(!active||total<=0){el.style.display="none";return;}
     var left=Math.max(0,Math.round(total-(nowS()-l.t)));
     el.style.display="block";
-    el.innerHTML="&#9201; "+(left>0?"Gợi ý gọi "+esc(cfg.phone)+" sau "+Math.floor(left/60)+":"+pad(left%60)+" nếu chưa ai xử lý":"Đã hết thời gian chờ — hãy gọi "+esc(cfg.phone)+" ngay");
+    el.innerHTML="&#9201; "+(left>0?"Call "+esc(cfg.phone)+" in "+Math.floor(left/60)+":"+pad(left%60)+" if no one acts":"Time is up — call "+esc(cfg.phone)+" now");
   }
   setInterval(tickCd,500);
 
@@ -177,14 +177,14 @@ a.lnk{color:var(--ink);text-decoration:underline dotted;cursor:pointer}
   $("settings").onclick=function(){
     if(window.Notification&&Notification.permission==="default") Notification.requestPermission();
     beep(); if(navigator.vibrate) navigator.vibrate(200);
-    toast("Âm báo và rung đã bật khi trang đang mở. Tên, địa chỉ, số khẩn cấp đặt bằng tham số khi chạy main.py.");
+    toast("Sound and vibration are on while this page is open. Name, address and emergency number are set with main.py options.");
   };
 
   var tb=$("talk");
-  function talkDown(e){ e.preventDefault(); if(!cfg.talk){ toast("Tính năng nói chuyện hai chiều chưa được kết nối. Hiện tại hãy gọi điện trực tiếp."); return; } tb.classList.add("talking"); $("voice").style.display="block"; }
+  function talkDown(e){ e.preventDefault(); if(!cfg.talk){ toast("Two-way talk is not connected yet. Please call directly for now."); return; } tb.classList.add("talking"); $("voice").style.display="block"; }
   function talkUp(){ tb.classList.remove("talking"); $("voice").style.display="none"; }
   tb.addEventListener("pointerdown",talkDown); tb.addEventListener("pointerup",talkUp); tb.addEventListener("pointercancel",talkUp); tb.addEventListener("pointerleave",talkUp);
-  if(location.hash==="#talk") setTimeout(function(){toast("Tính năng nói chuyện hai chiều chưa được kết nối. Hãy gọi điện trực tiếp.");},800);
+  if(location.hash==="#talk") setTimeout(function(){toast("Two-way talk is not connected yet. Please call directly.");},800);
 
   video(); poll(); setInterval(poll,2000);
 })();

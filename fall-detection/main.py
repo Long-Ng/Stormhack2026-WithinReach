@@ -58,8 +58,8 @@ def parse_args() -> argparse.Namespace:
                    help="ntfy topic for an extra phone push (or set env FALL_NTFY_TOPIC)")
     p.add_argument("--ntfy-server", default=os.environ.get("FALL_NTFY_SERVER", "https://ntfy.sh"),
                    help="ntfy server (default https://ntfy.sh)")
-    p.add_argument("--name", default="Người thân", help="name of the monitored person (phone page + push)")
-    p.add_argument("--room", default="Phòng khách", help="room name shown on the phone page")
+    p.add_argument("--name", default="Your family member", help="name of the monitored person (phone page + push)")
+    p.add_argument("--room", default="Living room", help="room name shown on the phone page")
     p.add_argument("--address", default="", help="home address shown on the phone page")
     p.add_argument("--phone", default="911", help="emergency number for the Call button")
     p.add_argument("--countdown", type=int, default=120,

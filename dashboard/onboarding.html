@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -80,7 +80,7 @@ canvas{display:block;margin:0 auto 18px;width:100%;max-width:300px;height:40px}
   </div>
   <div class="hero">
     <div class="img">
-      <span class="room" id="roomPill">Phòng khách</span>
+      <span class="room" id="roomPill">Living room</span>
       <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#7d9088" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>
     </div>
     <div class="row">
@@ -177,8 +177,8 @@ canvas{display:block;margin:0 auto 18px;width:100%;max-width:300px;height:40px}
       micBlocked:"This browser can't use the microphone here (needs HTTPS or localhost). Use your phone's recorder app.",uploadFail:"Couldn't save the message. Check the connection to the server.",
       noProfile:"This server has no profile yet. Tap Get Started.",needBoth:"You need a recorded message and at least one family member.",saveFail:"Couldn't save, try again."}
   };
-  var LANG = new URLSearchParams(location.search).get("lang") || localStorage.getItem("fd.lang") || "vi";
-  if(!T[LANG]) LANG = "vi";
+  var LANG = new URLSearchParams(location.search).get("lang") || localStorage.getItem("fd.lang") || "en";
+  if(!T[LANG]) LANG = "en";
   function t(k){return (T[LANG] && T[LANG][k]) || T.en[k] || k;}
 
   var cfg = {room:"", phone:"911", address:""};
