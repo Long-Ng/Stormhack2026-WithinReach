@@ -19,6 +19,7 @@ import glob
 import json
 import os
 import sys
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -65,6 +66,9 @@ def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("root"), p.add_argument("pattern"), p.add_argument("out")
     p.add_argument("--hold", type=float, default=5.0)
+    p.add_argument("--gap", type=float, default=0.0, metavar="S",
+                   help="wait S seconds between Gemini requests (free tier: 13 keeps 3.8 Flash "
+                        "under 5 a minute)")
     p.add_argument("--images-only", action="store_true", help="skip the video (old behaviour)")
     p.add_argument("--limit", type=int, default=0, help="only the first N videos (0 = all)")
     args = p.parse_args()
@@ -73,7 +77,8 @@ def main() -> int:
     if not key:
         print("set gemini_api_key in params.local.toml or GEMINI_API_KEY", file=sys.stderr)
         return 1
-    client = GeminiClient(key, cfg.gemini_model, fallback_models=(cfg.gemini_fallback_model,))
+    client = GeminiClient(key, cfg.gemini_model, fallback_models=(cfg.gemini_fallback_model,),
+                          video_fps=cfg.gemini_video_fps)
     vids = sorted(glob.glob(str(Path(args.root) / args.pattern)))
     if args.limit:
         vids = vids[:args.limit]
@@ -82,6 +87,8 @@ def main() -> int:
         rel = Path(v).relative_to(args.root).as_posix()
         truth = is_fall_video(rel)
         for t, hist in replay(v, cfg, args.hold):
+            if rows and args.gap:
+                time.sleep(args.gap)
             # Same as the live analyst: video first, 8 stills if that fails.
             r, mode = None, "images"
             if not args.images_only:

@@ -186,12 +186,14 @@ def main() -> int:
     if alerts is not None and gemini_key:
         history = FrameHistory()
         analyst = FallAnalyst(
-            GeminiClient(gemini_key, cfg.gemini_model, fallback_models=(cfg.gemini_fallback_model,)),
+            GeminiClient(gemini_key, cfg.gemini_model, fallback_models=(cfg.gemini_fallback_model,),
+                         video_fps=cfg.gemini_video_fps),
+            update_client=GeminiClient(gemini_key, cfg.gemini_update_model),
             on_report=lambda inc_id, r, minutes, still: manager.add_report(
                 inc_id, report_dict(r, minutes, cfg.emergency_number, still)),
             is_open=manager.is_open, update_s=cfg.gemini_update_s,
             max_updates=int(cfg.gemini_max_minutes * 60 / cfg.gemini_update_s))
-        print(f"[gemini] fall analysis on ({cfg.gemini_model}), "
+        print(f"[gemini] fall analysis on ({cfg.gemini_model}; checks on {cfg.gemini_update_model}), "
               f"checks every {cfg.gemini_update_s:g} s for {cfg.gemini_max_minutes:g} min")
     elif alerts is not None:
         print("[gemini] off: set gemini_api_key in params.local.toml to describe falls")
@@ -204,8 +206,7 @@ def main() -> int:
             watcher = SceneWatcher(cfg.scene_empty_s, cfg.scene_change_frac, cfg.scene_change_s,
                                    cfg.scene_min_interval_s, have_zones=bool(zone_store.zones))
             scanner = SceneScanner(
-                GeminiClient(gemini_key, cfg.gemini_model,
-                             fallback_models=(cfg.gemini_fallback_model,)).analyze_scene,
+                GeminiClient(gemini_key, cfg.gemini_update_model).analyze_scene,
                 zone_store, watcher)
         names = ", ".join(z.label for z in zone_store.zones) or "none yet"
         print(f"[zones] rest zones: {names}"

@@ -99,7 +99,12 @@ public_url = ""               # empty = http://<this PC's Wi-Fi IP>:<port>
 # open. Camera frames are sent to Google. Off unless gemini_api_key is set in
 # params.local.toml (or the GEMINI_API_KEY environment variable).
 gemini_model = "gemini-3.8-flash"
-gemini_fallback_model = "gemini-3.5-flash-lite"   # used when the main model is overloaded (503)
+gemini_fallback_model = "gemini-3.5-flash-lite"   # used when the main model is overloaded or limited
+# Free tier: 3.8 Flash allows 5 requests a minute and 20 a day, Flash Lite 15 and 500.
+# So gemini_model only does the first look at each fall; the per-minute checks and the
+# room scans use gemini_update_model. A rate-limited model is skipped until Google says.
+gemini_update_model = "gemini-3.5-flash-lite"
+gemini_video_fps = 5.0       # enough to see how fast someone went down
 gemini_update_s = 60.0       # how often Gemini checks on the person
 gemini_notify_s = 300.0      # the monitor gets the latest analysis at most this often
 gemini_notify_urgent_now = true  # except: turning urgent ("call 911") is sent at once

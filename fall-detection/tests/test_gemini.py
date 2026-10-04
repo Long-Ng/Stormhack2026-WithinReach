@@ -204,6 +204,8 @@ def test_video_request_has_the_clip_and_its_frame_rate():
 
 
 class VideoClient:
+    video_fps = 5.0
+
     def __init__(self, video_fails):
         self.video_fails, self.used = video_fails, []
         self.done = threading.Semaphore(0)
@@ -293,6 +295,8 @@ def test_still_time_counts_consecutive_still_checks_only():
     done, got = threading.Semaphore(0), []
 
     class Seq:
+        video_fps = 5.0
+
         def analyze_video(self, *a):
             return report(movement=next(moves))
 
@@ -311,3 +315,76 @@ def test_still_time_counts_consecutive_still_checks_only():
         assert done.acquire(timeout=10)
     # still at 0 and 1, moved at 2, still again from 3
     assert got == [(0, 0), (1, 1), (2, 0), (3, 0), (4, 1), (5, 2)]
+
+
+
+# --- rate limits ---------------------------------------------------------------------------
+def http_error(code, body=b""):
+    import io
+    import urllib.error
+    return urllib.error.HTTPError("u", code, "x", {}, io.BytesIO(body))
+
+
+def test_cooldown_comes_from_googles_error_details():
+    from gemini import DAILY_COOLDOWN_S, DEFAULT_COOLDOWN_S, cooldown_s
+    retry = {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "33s"}
+    daily = {"@type": "type.googleapis.com/google.rpc.QuotaFailure", "violations": [
+        {"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}
+    body = lambda *d: json.dumps({"error": {"code": 429, "details": list(d)}}).encode()
+    assert cooldown_s(body(retry)) == 33.0
+    assert cooldown_s(body(retry, daily)) == DAILY_COOLDOWN_S
+    assert cooldown_s(b"not json") == DEFAULT_COOLDOWN_S
+
+
+def test_rate_limited_model_is_skipped_until_its_delay_passes(monkeypatch):
+    now = [0.0]
+    calls = []
+    c = GeminiClient("k", "main", fallback_models=("lite",), sleep=lambda s: None,
+                     clock=lambda: now[0])
+
+    def fake_call(model, data):
+        calls.append(model)
+        if model == "main" and now[0] < 60:
+            raise http_error(429, json.dumps({"error": {"details": [{"retryDelay": "40s"}]}}).encode())
+        return vars(report())
+    monkeypatch.setattr(c, "_call", fake_call)
+    c.analyze([]); c.analyze([])
+    assert calls == ["main", "lite", "lite"]  # no retries on 429; main skipped while limited
+    now[0] = 61.0
+    c.analyze([])
+    assert calls[-1] == "main"                # back once the delay has passed
+
+
+def test_every_model_rate_limited_raises(monkeypatch):
+    import pytest
+    c = GeminiClient("k", "main", fallback_models=("lite",), sleep=lambda s: None, clock=lambda: 0.0)
+    monkeypatch.setattr(c, "_call", lambda m, d: (_ for _ in ()).throw(http_error(429)))
+    with pytest.raises(Exception):
+        c.analyze([])
+    with pytest.raises(RuntimeError, match="rate limited"):
+        c.analyze([])  # both skipped now, nothing even tried
+
+
+def test_video_is_thinned_to_the_configured_fps():
+    from gemini import VIDEO_S, encode_mp4, thin
+    clip = thin(history_10fps().span(VIDEO_S), 5.0)
+    assert len(clip) in (30, 31)
+    assert 4.5 <= encode_mp4(clip)[1] <= 5.5
+
+
+def test_updates_use_the_update_client():
+    first, updates = FakeClient(), FakeClient()
+    done = threading.Semaphore(0)
+    a = FallAnalyst(first, lambda *args: done.release(), update_client=updates, update_s=60.0)
+    first.analyze_video = lambda *args: report()
+    first.video_fps = 5.0
+    h = history_10fps()
+    a.start("inc1", h, 111.9)
+    a.tick(h, 111.9 + 61)
+    assert done.acquire(timeout=10) and done.acquire(timeout=10)
+    assert updates.calls == [pytest_approx_minutes(1)] and first.calls == []
+
+
+def pytest_approx_minutes(m):
+    import pytest
+    return pytest.approx(m, abs=0.05)

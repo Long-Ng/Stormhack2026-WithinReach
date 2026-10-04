@@ -96,6 +96,8 @@ class Config:
     gemini_api_key: str = ""  # put in params.local.toml (gitignored) or env GEMINI_API_KEY
     gemini_model: str = "gemini-3.8-flash"
     gemini_fallback_model: str = "gemini-3.5-flash-lite"  # tried when the main one is overloaded
+    gemini_update_model: str = "gemini-3.5-flash-lite"  # per-minute checks and room scans
+    gemini_video_fps: float = 5.0  # frames per second in the first-look video
     gemini_update_s: float = 60.0  # Gemini checks on the person this often while the incident is open
     gemini_notify_s: float = 300.0  # the monitor gets an analysis at most this often
     gemini_notify_urgent_now: bool = True  # ...except when it turns urgent: at once

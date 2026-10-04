@@ -196,16 +196,42 @@ def encode_frames(frames: list[tuple[float, np.ndarray]]) -> list[dict]:
     return parts
 
 
-RETRY_CODES = {429, 500, 502, 503, 504}  # overloaded / rate limited: worth another try
+RETRY_CODES = {500, 502, 503, 504}  # Google overloaded: worth another try in a few seconds
 RETRY_WAITS_S = (2.0, 5.0)  # per model, between attempts
+RATE_LIMITED = 429  # our quota: skip that model until its retry delay has passed
+DEFAULT_COOLDOWN_S = 60.0  # per-minute limit, when Google gives no retry delay
+DAILY_COOLDOWN_S = 3600.0  # daily limit used up: look again in an hour
+
+
+def cooldown_s(error_body: bytes) -> float:
+    # How long to leave a model alone after a 429, from Google's error details:
+    # RetryInfo.retryDelay ("33s"), and a quotaId naming a per-day limit.
+    try:
+        details = json.loads(error_body).get("error", {}).get("details", [])
+    except (ValueError, AttributeError):
+        return DEFAULT_COOLDOWN_S
+    delay = DEFAULT_COOLDOWN_S
+    for d in details:
+        if str(d.get("retryDelay", "")).endswith("s"):
+            try:
+                delay = max(1.0, float(d["retryDelay"][:-1]))
+            except ValueError:
+                pass
+        for v in d.get("violations", []) or []:
+            if "PerDay" in str(v.get("quotaId", "")):
+                return max(delay, DAILY_COOLDOWN_S)
+    return delay
 
 
 class GeminiClient:
     def __init__(self, api_key: str, model: str, timeout_s: float = 60.0,
-                 fallback_models: tuple[str, ...] = (), sleep=time.sleep):
+                 fallback_models: tuple[str, ...] = (), sleep=time.sleep,
+                 clock=time.monotonic, video_fps: float = 5.0):
         self.api_key, self.model, self.timeout_s = api_key, model, timeout_s
         self.models = (model,) + tuple(m for m in fallback_models if m and m != model)
-        self._sleep = sleep
+        self.video_fps = video_fps
+        self._sleep, self._clock = sleep, clock
+        self.rate_limited_until: dict[str, float] = {}  # model -> clock time it may be used again
         # Real usage from each reply's usageMetadata, totalled since start (any thread).
         self.usage = {"calls": 0, "input_tokens": 0, "output_tokens": 0}
         self._usage_lock = threading.Lock()
@@ -266,20 +292,34 @@ class GeminiClient:
     def _generate(self, body: dict, parse=FallReport.from_json):
         data = json.dumps(body).encode()
         last: Exception | None = None
-        # Gemini often answers 503 "high demand": retry, then try the fallback model.
+        # 503 "high demand": retry a few seconds later. 429 is our own quota (free tier:
+        # 5 requests a minute, 20 a day on 3.8 Flash), so waiting seconds does not help:
+        # skip that model until Google's retry delay has passed and use the next one.
         for model in self.models:
+            if self._clock() < self.rate_limited_until.get(model, float("-inf")):
+                continue
             for attempt in range(len(RETRY_WAITS_S) + 1):
                 if attempt:
                     self._sleep(RETRY_WAITS_S[attempt - 1])
                 try:
                     return parse(self._call(model, data))
                 except urllib.error.HTTPError as e:
+                    if e.code == RATE_LIMITED:
+                        wait = cooldown_s(e.read() if e.fp else b"")
+                        self.rate_limited_until[model] = self._clock() + wait
+                        print(f"[gemini] {model} rate limited: skipping it for {wait:.0f} s",
+                              file=sys.stderr, flush=True)
+                        last = e
+                        break
                     if e.code not in RETRY_CODES:
                         raise  # bad key or bad request: retrying will not help
                     last = e
                 except (TimeoutError, urllib.error.URLError) as e:
                     last = e
-            print(f"[gemini] {model} unavailable ({last!r})", file=sys.stderr, flush=True)
+            else:
+                print(f"[gemini] {model} unavailable ({last!r})", file=sys.stderr, flush=True)
+        if last is None:
+            raise RuntimeError("every Gemini model is rate limited for now")
         raise last
 
     def _call(self, model: str, data: bytes) -> dict:
@@ -335,6 +375,16 @@ def _decode(jpg: bytes) -> np.ndarray:
     return cv2.imdecode(np.frombuffer(jpg, np.uint8), cv2.IMREAD_COLOR)
 
 
+def thin(frames: list[tuple[float, bytes]], fps: float) -> list[tuple[float, bytes]]:
+    """Keep at most `fps` frames per second (the buffer holds 10)."""
+    out, last = [], float("-inf")
+    for t, j in frames:
+        if t - last >= 0.9 / fps:
+            out.append((t, j))
+            last = t
+    return out
+
+
 def encode_mp4(frames: list[tuple[float, bytes]]) -> tuple[bytes, float]:
     """(t, jpeg) frames -> (mp4 bytes, fps). H.264 on Windows, like the event clips."""
     fps = estimate_fps([t for t, _ in frames], default=10.0)
@@ -373,8 +423,11 @@ class FallAnalyst:
     def __init__(self, client: GeminiClient,
                  on_report: Callable[[str, FallReport, float, float], None],
                  is_open: Callable[[str], bool] = lambda _id: True,
-                 update_s: float = 60.0, max_updates: int = 60):
+                 update_s: float = 60.0, max_updates: int = 60,
+                 update_client: GeminiClient | None = None):
         self.client, self.on_report, self.is_open = client, on_report, is_open
+        # The per-minute checks go to a model with a bigger daily allowance.
+        self.update_client = update_client or client
         self.update_s, self.max_updates = update_s, max_updates
         self.watches: dict[str, _Watch] = {}
         self._still_since: dict[str, float] = {}  # worker thread: minute they were first seen still
@@ -408,7 +461,7 @@ class FallAnalyst:
             report = first_look(self.client, clip) if clip else None
             try:
                 if report is None:
-                    report = self.client.analyze(frames, minutes)
+                    report = (self.client if clip else self.update_client).analyze(frames, minutes)
             except Exception as e:  # network, quota, bad reply: never stop the detector
                 print(f"[gemini] analysis failed: {e!r}", file=sys.stderr, flush=True)
                 continue
@@ -427,7 +480,7 @@ class FallAnalyst:
 def first_look(client: GeminiClient, clip: list[tuple[float, bytes]]) -> FallReport | None:
     """Video analysis of a new fall, or None (the caller then sends still images)."""
     try:
-        mp4, fps = encode_mp4(clip)
+        mp4, fps = encode_mp4(thin(clip, client.video_fps))
         return client.analyze_video(mp4, fps, clip[-1][0] - clip[0][0])
     except Exception as e:
         print(f"[gemini] video failed, using still images: {e!r}", file=sys.stderr, flush=True)
